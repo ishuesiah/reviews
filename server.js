@@ -21,6 +21,11 @@ const JUDGEME_API_TOKEN = process.env.JUDGEME_API_TOKEN;
 const SHOP_DOMAIN = process.env.SHOP_DOMAIN || 'hemlock-oak.myshopify.com';
 const PLATFORM = process.env.PLATFORM || 'shopify';
 
+//Check if running
+app.get('/', (req, res) => {
+  res.send('Review Proxy Server is up and running!');
+});
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'OK', message: 'Server is running' });
