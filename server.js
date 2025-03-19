@@ -104,47 +104,64 @@ app.get('/api/customer-reviews', async (req, res) => {
  *   "redeemValue": "10OFF" // e.g. $ amount, % off, free shipping, etc.
  * }
  ********************************************************************/
+// Add at the top (if not already present)
+const mysql = require('mysql2/promise');
+
+// ...
+
 app.post('/api/referral/redeem', async (req, res) => {
+  let connection;
   try {
     const { email, pointsToRedeem, redeemType, redeemValue } = req.body;
     if (!email || !pointsToRedeem) {
       return res.status(400).json({ error: 'Missing email or pointsToRedeem.' });
     }
     
-    // 1) Find user in MySQL
-    const [rows] = await pool.execute('SELECT * FROM users WHERE email = ?', [email]);
+    // 1) Create a MySQL connection
+    connection = await mysql.createConnection({
+      host: 'northamerica-northeast1-001.proxy.kinsta.app',         // e.g., 'localhost'
+      user: 'hemlockandoak',         // your MySQL username
+      password: 'jH3&wM0gH2a', // your MySQL password
+      database: 'referral_program_db'  // your database name
+    });
+    
+    // 2) Find user in MySQL
+    const [rows] = await connection.execute('SELECT * FROM users WHERE email = ?', [email]);
     if (rows.length === 0) {
       return res.status(404).json({ error: 'User not found.' });
     }
     const user = rows[0];
     
-    // 2) Check if the user has enough points
+    // 3) Check if the user has enough points
     if (user.points < pointsToRedeem) {
       return res.status(400).json({ error: 'Not enough points to redeem.' });
     }
     
-    // 3) Subtract redeemed points from MySQL
+    // 4) Subtract redeemed points from the user's balance
     const newPoints = user.points - pointsToRedeem;
-    await pool.execute('UPDATE users SET points = ? WHERE user_id = ?', [newPoints, user.user_id]);
+    await connection.execute('UPDATE users SET points = ? WHERE user_id = ?', [newPoints, user.user_id]);
     
-    // 4) Create a discount (or gift card) code via Shopify Admin API
-    let generatedCode = '';
-    if (redeemType === 'discount') {
-      generatedCode = await createShopifyDiscountCode(redeemValue);
-    } else if (redeemType === 'gift_card') {
-      generatedCode = await createShopifyGiftCard(redeemValue); // You'd need to implement this similarly
-    } else {
-      generatedCode = await createShopifyDiscountCode(redeemValue);
-    }
-    
-    // 5) Log the redemption in your database
+    // 5) (Optional) Log the redemption in your database
     const insertActionSql = `
       INSERT INTO user_actions (user_id, action_type, points_awarded)
       VALUES (?, ?, ?)
     `;
-    await pool.execute(insertActionSql, [user.user_id, `redeem-${redeemType}`, -pointsToRedeem]);
+    await connection.execute(insertActionSql, [user.user_id, `redeem-${redeemType}`, -pointsToRedeem]);
     
-    // 6) Return the new code and updated points balance
+    // 6) Create a discount or gift card code via Shopify Admin API
+    let generatedCode = '';
+    if (redeemType === 'discount') {
+      generatedCode = await createShopifyDiscountCode(redeemValue);
+    } else if (redeemType === 'gift_card') {
+      generatedCode = await createShopifyGiftCard(redeemValue); // Implement this if needed.
+    } else {
+      generatedCode = await createShopifyDiscountCode(redeemValue);
+    }
+    
+    // 7) Close the connection
+    await connection.end();
+    
+    // 8) Return the generated code and new points balance
     return res.json({
       message: 'Redeemed points successfully.',
       discountCode: generatedCode,
@@ -153,9 +170,11 @@ app.post('/api/referral/redeem', async (req, res) => {
     
   } catch (error) {
     console.error('Error redeeming points:', error);
+    if (connection) await connection.end();
     return res.status(500).json({ error: error.message });
   }
 });
+
 
 /********************************************************************
  * Helper function to create a discount code via Shopify Admin API
