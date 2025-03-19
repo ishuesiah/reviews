@@ -93,6 +93,160 @@ app.get('/api/customer-reviews', async (req, res) => {
   }
 });
 
+/********************************************************************
+ * POST /api/referral/redeem
+ * Body: {
+ *   "email": "user@example.com",
+ *   "pointsToRedeem": 10,
+ *   "redeemType": "discount" or "gift_card",
+ *   "redeemValue": "10OFF" // could be $ amount, % off, free shipping, etc.
+ * }
+ ********************************************************************/
+app.post('/api/referral/redeem', async (req, res) => {
+  try {
+    const { email, pointsToRedeem, redeemType, redeemValue } = req.body;
+    if (!email || !pointsToRedeem) {
+      return res.status(400).json({ error: 'Missing email or pointsToRedeem.' });
+    }
+    
+    // 1) Find user
+    const [rows] = await pool.execute('SELECT * FROM users WHERE email = ?', [email]);
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'User not found.' });
+    }
+    const user = rows[0];
+    
+    // 2) Check points
+    if (user.points < pointsToRedeem) {
+      return res.status(400).json({ error: 'Not enough points to redeem.' });
+    }
+    
+    // 3) Subtract from MySQL
+    const newPoints = user.points - pointsToRedeem;
+    await pool.execute('UPDATE users SET points = ? WHERE user_id = ?', [newPoints, user.user_id]);
+    
+    // 4) Call Shopify Admin to create code
+    let generatedCode = '';
+    
+    if (redeemType === 'discount') {
+      generatedCode = await createShopifyDiscountCode(redeemValue); // see function below
+    } else if (redeemType === 'gift_card') {
+      generatedCode = await createShopifyGiftCard(redeemValue); // implement similarly
+    } else {
+      // default to discount if not specified
+      generatedCode = await createShopifyDiscountCode(redeemValue);
+    }
+    
+    // 5) Log the redemption
+    const insertActionSql = `
+      INSERT INTO user_actions (user_id, action_type, points_awarded)
+      VALUES (?, ?, ?)
+    `;
+    await pool.execute(insertActionSql, [user.user_id, `redeem-${redeemType}`, -pointsToRedeem]);
+    
+    // 6) Return the new code
+    return res.json({
+      message: 'Redeemed points successfully.',
+      discountCode: generatedCode,
+      newPoints: newPoints
+    });
+    
+  } catch (error) {
+    console.error('Error redeeming points:', error);
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+/********************************************************************
+ * Helper function to create a discount code via Shopify Admin API
+ * This example creates a “Basic” discount code for a fixed amount off.
+ * Adjust the mutation for free shipping or percentage discounts as needed.
+ ********************************************************************/
+async function createShopifyDiscountCode(amountOff) {
+  // Use your real Admin API credentials
+  const adminApiUrl = 'https://hemlock-oak.myshopify.com/api/2023-07/graphql.json';
+  const adminApiToken = process.env.SHOPIFY_ADMIN_TOKEN; // keep in .env
+  
+  // Example mutation for a fixed-amount discount code
+  const mutation = `
+    mutation discountCodeBasicCreate($basicCodeDiscount: DiscountCodeBasicInput!) {
+      discountCodeBasicCreate(basicCodeDiscount: $basicCodeDiscount) {
+        codeDiscountNode {
+          codeDiscount {
+            __typename
+            ... on DiscountCodeBasic {
+              title
+              codes(first: 1) {
+                edges {
+                  node {
+                    code
+                  }
+                }
+              }
+            }
+          }
+          id
+        }
+        userErrors {
+          field
+          message
+        }
+      }
+    }
+  `;
+  
+  // For uniqueness, you might combine the `amountOff` with random characters:
+  const uniqueSuffix = Math.random().toString(36).substr(2, 5).toUpperCase();
+  const codeTitle = `POINTS-${amountOff}-${uniqueSuffix}`;
+  
+  // Basic fixed-amount discount example: $X off entire order
+  const variables = {
+    basicCodeDiscount: {
+      title: codeTitle,
+      startsAt: new Date().toISOString(), // set to “now”
+      usageLimit: 1, // optional, how many times code can be used
+      appliesOncePerCustomer: true,
+      customerSelection: { all: true },
+      code: codeTitle,
+      discountAmount: {
+        amount: parseFloat(amountOff.replace(/\D/g,'')), // extract numeric from '10OFF'
+        // if you want a percentage discount, define "percentage" instead
+        // e.g.: discountType: PERCENTAGE
+      },
+      discountType: "FIXED_AMOUNT",
+      appliesTo: {
+        allProducts: true
+      }
+    }
+  };
+  
+  const response = await fetch(adminApiUrl, {
+    method: 'POST',
+    headers: {
+      'X-Shopify-Access-Token': adminApiToken,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ query: mutation, variables })
+  });
+  
+  const responseData = await response.json();
+  
+  if (responseData.errors) {
+    console.error('GraphQL errors:', responseData.errors);
+    throw new Error('Failed to create discount code');
+  }
+  
+  const userErrors = responseData.data.discountCodeBasicCreate.userErrors;
+  if (userErrors && userErrors.length) {
+    throw new Error(userErrors[0].message);
+  }
+  
+  // Extract final code from returned data
+  const codeNode = responseData.data.discountCodeBasicCreate.codeDiscountNode.codeDiscount.codes.edges[0].node;
+  return codeNode.code;
+}
+
+
 // Start the server
 app.listen(port, () => {
   console.log(`Judge.me proxy server running on port ${port}`);
