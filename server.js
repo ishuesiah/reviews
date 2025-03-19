@@ -1,11 +1,21 @@
-// server.js - Node.js proxy for Judge.me reviews
+// server.js
 const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
+const mysql = require('mysql2/promise'); // For MySQL pool
+const fetch = require('node-fetch'); // Install with: npm install node-fetch
 require('dotenv').config();
 
 const app = express();
 const port = process.env.PORT || 3000;
+
+// Initialize MySQL pool
+const pool = mysql.createPool({
+  host: process.env.MYSQL_HOST,         // e.g. 'localhost'
+  user: process.env.MYSQL_USER,         // your MySQL username
+  password: process.env.MYSQL_PASSWORD, // your MySQL password
+  database: process.env.MYSQL_DATABASE, // your database name
+});
 
 // Enable CORS for your Shopify store domain
 app.use(cors({
@@ -16,10 +26,7 @@ app.use(cors({
 
 app.use(express.json());
 
-// Get Judge.me configuration from environment variables
-const JUDGEME_API_TOKEN = process.env.JUDGEME_API_TOKEN;
-const SHOP_DOMAIN = process.env.SHOP_DOMAIN || 'hemlock-oak.myshopify.com';
-const PLATFORM = process.env.PLATFORM || 'shopify';
+// --- Existing endpoints for Judge.me reviews ---
 
 // Endpoint to submit a review
 app.post('/api/submit-review', async (req, res) => {
@@ -42,8 +49,7 @@ app.post('/api/submit-review', async (req, res) => {
   }
 });
 
-
-//Check if running
+// Check if running
 app.get('/', (req, res) => {
   res.send('Review Proxy Server is up and running!');
 });
@@ -56,7 +62,6 @@ app.get('/health', (req, res) => {
 // Endpoint to fetch customer reviews
 app.get('/api/customer-reviews', async (req, res) => {
   try {
-    // Get the customer email from the query parameter
     const { email } = req.query;
     
     if (!email) {
@@ -65,27 +70,22 @@ app.get('/api/customer-reviews', async (req, res) => {
     
     console.log(`Fetching reviews for customer: ${email}`);
     
-    // Call Judge.me API to get reviews by this customer
     const reviewsResponse = await axios.get('https://judge.me/api/v1/reviews', {
       params: {
-        api_token: JUDGEME_API_TOKEN,
-        shop_domain: SHOP_DOMAIN,
-        platform: PLATFORM,
+        api_token: process.env.JUDGEME_API_TOKEN,
+        shop_domain: process.env.SHOP_DOMAIN || 'hemlock-oak.myshopify.com',
+        platform: process.env.PLATFORM || 'shopify',
         reviewer_email: email
       }
     });
     
-    // Return the reviews data
     return res.json(reviewsResponse.data);
   } catch (error) {
     console.error('Error fetching reviews:', error.message);
-    
-    // More detailed error logging
     if (error.response) {
       console.error('Response status:', error.response.status);
       console.error('Response data:', error.response.data);
     }
-    
     return res.status(500).json({ 
       error: 'Failed to fetch reviews',
       details: error.message
@@ -99,7 +99,7 @@ app.get('/api/customer-reviews', async (req, res) => {
  *   "email": "user@example.com",
  *   "pointsToRedeem": 10,
  *   "redeemType": "discount" or "gift_card",
- *   "redeemValue": "10OFF" // could be $ amount, % off, free shipping, etc.
+ *   "redeemValue": "10OFF" // e.g. $ amount, % off, free shipping, etc.
  * }
  ********************************************************************/
 app.post('/api/referral/redeem', async (req, res) => {
@@ -109,42 +109,40 @@ app.post('/api/referral/redeem', async (req, res) => {
       return res.status(400).json({ error: 'Missing email or pointsToRedeem.' });
     }
     
-    // 1) Find user
+    // 1) Find user in MySQL
     const [rows] = await pool.execute('SELECT * FROM users WHERE email = ?', [email]);
     if (rows.length === 0) {
       return res.status(404).json({ error: 'User not found.' });
     }
     const user = rows[0];
     
-    // 2) Check points
+    // 2) Check if the user has enough points
     if (user.points < pointsToRedeem) {
       return res.status(400).json({ error: 'Not enough points to redeem.' });
     }
     
-    // 3) Subtract from MySQL
+    // 3) Subtract redeemed points from MySQL
     const newPoints = user.points - pointsToRedeem;
     await pool.execute('UPDATE users SET points = ? WHERE user_id = ?', [newPoints, user.user_id]);
     
-    // 4) Call Shopify Admin to create code
+    // 4) Create a discount (or gift card) code via Shopify Admin API
     let generatedCode = '';
-    
     if (redeemType === 'discount') {
-      generatedCode = await createShopifyDiscountCode(redeemValue); // see function below
+      generatedCode = await createShopifyDiscountCode(redeemValue);
     } else if (redeemType === 'gift_card') {
-      generatedCode = await createShopifyGiftCard(redeemValue); // implement similarly
+      generatedCode = await createShopifyGiftCard(redeemValue); // You'd need to implement this similarly
     } else {
-      // default to discount if not specified
       generatedCode = await createShopifyDiscountCode(redeemValue);
     }
     
-    // 5) Log the redemption
+    // 5) Log the redemption in your database
     const insertActionSql = `
       INSERT INTO user_actions (user_id, action_type, points_awarded)
       VALUES (?, ?, ?)
     `;
     await pool.execute(insertActionSql, [user.user_id, `redeem-${redeemType}`, -pointsToRedeem]);
     
-    // 6) Return the new code
+    // 6) Return the new code and updated points balance
     return res.json({
       message: 'Redeemed points successfully.',
       discountCode: generatedCode,
@@ -159,15 +157,12 @@ app.post('/api/referral/redeem', async (req, res) => {
 
 /********************************************************************
  * Helper function to create a discount code via Shopify Admin API
- * This example creates a “Basic” discount code for a fixed amount off.
- * Adjust the mutation for free shipping or percentage discounts as needed.
  ********************************************************************/
 async function createShopifyDiscountCode(amountOff) {
-  // Use your real Admin API credentials
-  const adminApiUrl = 'https://hemlock-oak.myshopify.com/api/2023-07/graphql.json';
-  const adminApiToken = process.env.SHOPIFY_ADMIN_TOKEN; // keep in .env
+  // Ensure your store name is correct and your admin token is set in .env
+  const adminApiUrl = 'https://hemlock-oak.myshopify.com/admin/api/2023-07/graphql.json';
+  const adminApiToken = process.env.SHOPIFY_ADMIN_TOKEN;
   
-  // Example mutation for a fixed-amount discount code
   const mutation = `
     mutation discountCodeBasicCreate($basicCodeDiscount: DiscountCodeBasicInput!) {
       discountCodeBasicCreate(basicCodeDiscount: $basicCodeDiscount) {
@@ -195,23 +190,20 @@ async function createShopifyDiscountCode(amountOff) {
     }
   `;
   
-  // For uniqueness, you might combine the `amountOff` with random characters:
+  // Generate a unique code title
   const uniqueSuffix = Math.random().toString(36).substr(2, 5).toUpperCase();
   const codeTitle = `POINTS-${amountOff}-${uniqueSuffix}`;
   
-  // Basic fixed-amount discount example: $X off entire order
   const variables = {
     basicCodeDiscount: {
       title: codeTitle,
-      startsAt: new Date().toISOString(), // set to “now”
-      usageLimit: 1, // optional, how many times code can be used
+      startsAt: new Date().toISOString(),
+      usageLimit: 1,
       appliesOncePerCustomer: true,
       customerSelection: { all: true },
       code: codeTitle,
       discountAmount: {
-        amount: parseFloat(amountOff.replace(/\D/g,'')), // extract numeric from '10OFF'
-        // if you want a percentage discount, define "percentage" instead
-        // e.g.: discountType: PERCENTAGE
+        amount: parseFloat(amountOff.replace(/\D/g, ''))
       },
       discountType: "FIXED_AMOUNT",
       appliesTo: {
@@ -241,14 +233,14 @@ async function createShopifyDiscountCode(amountOff) {
     throw new Error(userErrors[0].message);
   }
   
-  // Extract final code from returned data
   const codeNode = responseData.data.discountCodeBasicCreate.codeDiscountNode.codeDiscount.codes.edges[0].node;
   return codeNode.code;
 }
 
+// (Optional) Implement createShopifyGiftCard() similarly if you plan to support gift cards.
 
 // Start the server
 app.listen(port, () => {
-  console.log(`Judge.me proxy server running on port ${port}`);
+  console.log(`Server running on port ${port}`);
   console.log(`Configured for shop: ${SHOP_DOMAIN}`);
 });
