@@ -12,22 +12,16 @@ const SHOP_DOMAIN = process.env.SHOP_DOMAIN || 'hemlock-oak.myshopify.com';
 
 
 // Initialize MySQL pool
-async function getConnection() {
-  try {
-    const connection = await mysql.createConnection({
-      host: 'northamerica-northeast1-001.proxy.kinsta.app',
-      user: 'hemlockandoak',
-      password: 'jH3&wM0gH2a',
-      database: 'referral_program_db',
-      // Increase the connection timeout (in milliseconds) if needed
-      connectTimeout: 10000
-    });
-    return connection;
-  } catch (error) {
-    console.error('Error establishing MySQL connection:', error);
-    throw error;
-  }
-}
+const pool = mysql.createPool({
+  host: process.env.MYSQL_HOST || 'northamerica-northeast1-001.proxy.kinsta.app',
+  user: process.env.MYSQL_USER || 'hemlockandoak',
+  password: process.env.MYSQL_PASSWORD || 'jH3&wM0gH2a',
+  database: process.env.MYSQL_DATABASE || 'referral_program_db',
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0,
+});
+
 
 
 // Enable CORS for your Shopify store domain
@@ -119,40 +113,36 @@ app.get('/api/customer-reviews', async (req, res) => {
 // ...
 
 app.post('/api/referral/redeem', async (req, res) => {
-  let connection;
   try {
     const { email, pointsToRedeem, redeemType, redeemValue } = req.body;
     if (!email || !pointsToRedeem) {
       return res.status(400).json({ error: 'Missing email or pointsToRedeem.' });
     }
     
-    // Get a new connection
-    connection = await getConnection();
-    
-    // Find user in MySQL
-    const [rows] = await connection.execute('SELECT * FROM users WHERE email = ?', [email]);
+    // 1) Find user in MySQL using the pool
+    const [rows] = await pool.execute('SELECT * FROM users WHERE email = ?', [email]);
     if (rows.length === 0) {
       return res.status(404).json({ error: 'User not found.' });
     }
     const user = rows[0];
     
-    // Check if the user has enough points
+    // 2) Check if the user has enough points
     if (user.points < pointsToRedeem) {
       return res.status(400).json({ error: 'Not enough points to redeem.' });
     }
     
-    // Subtract redeemed points from the user's balance
+    // 3) Subtract redeemed points from the user's balance
     const newPoints = user.points - pointsToRedeem;
-    await connection.execute('UPDATE users SET points = ? WHERE user_id = ?', [newPoints, user.user_id]);
+    await pool.execute('UPDATE users SET points = ? WHERE user_id = ?', [newPoints, user.user_id]);
     
-    // Log the redemption in your database
+    // 4) Log the redemption
     const insertActionSql = `
       INSERT INTO user_actions (user_id, action_type, points_awarded)
       VALUES (?, ?, ?)
     `;
-    await connection.execute(insertActionSql, [user.user_id, `redeem-${redeemType}`, -pointsToRedeem]);
+    await pool.execute(insertActionSql, [user.user_id, `redeem-${redeemType}`, -pointsToRedeem]);
     
-    // Create a discount code via Shopify Admin API
+    // 5) Create a discount code via Shopify Admin API
     let generatedCode = '';
     if (redeemType === 'discount') {
       generatedCode = await createShopifyDiscountCode(redeemValue);
@@ -162,10 +152,7 @@ app.post('/api/referral/redeem', async (req, res) => {
       generatedCode = await createShopifyDiscountCode(redeemValue);
     }
     
-    // Close the connection
-    await connection.end();
-    
-    // Return the new code and updated points balance
+    // 6) Return the new code and updated points balance
     return res.json({
       message: 'Redeemed points successfully.',
       discountCode: generatedCode,
@@ -174,10 +161,10 @@ app.post('/api/referral/redeem', async (req, res) => {
     
   } catch (error) {
     console.error('Error redeeming points:', error);
-    if (connection) await connection.end();
     return res.status(500).json({ error: error.message });
   }
 });
+
 
 
 /********************************************************************
