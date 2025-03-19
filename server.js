@@ -21,6 +21,28 @@ const JUDGEME_API_TOKEN = process.env.JUDGEME_API_TOKEN;
 const SHOP_DOMAIN = process.env.SHOP_DOMAIN || 'hemlock-oak.myshopify.com';
 const PLATFORM = process.env.PLATFORM || 'shopify';
 
+// Endpoint to submit a review
+app.post('/api/submit-review', async (req, res) => {
+  try {
+    const reviewData = req.body;
+    // Attach required Judge.me parameters
+    reviewData.api_token = process.env.JUDGEME_API_TOKEN;
+    reviewData.shop_domain = process.env.SHOP_DOMAIN || 'hemlock-oak.myshopify.com';
+    reviewData.platform = process.env.PLATFORM || 'shopify';
+
+    // Forward the review to Judge.me
+    const response = await axios.post('https://judge.me/api/v1/reviews', reviewData, {
+      headers: { 'Content-Type': 'application/json' }
+    });
+    
+    return res.json(response.data);
+  } catch (error) {
+    console.error('Error submitting review:', error.message);
+    return res.status(500).json({ error: 'Failed to submit review', details: error.message });
+  }
+});
+
+
 //Check if running
 app.get('/', (req, res) => {
   res.send('Review Proxy Server is up and running!');
