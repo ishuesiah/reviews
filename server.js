@@ -104,8 +104,6 @@ app.get('/api/customer-reviews', async (req, res) => {
  *   "redeemValue": "10OFF" // e.g. $ amount, % off, free shipping, etc.
  * }
  ********************************************************************/
-// Add at the top (if not already present)
-const mysql = require('mysql2/promise');
 
 // ...
 
