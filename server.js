@@ -8,6 +8,8 @@ require('dotenv').config();
 
 const app = express();
 const port = process.env.PORT || 3000;
+const SHOP_DOMAIN = process.env.SHOP_DOMAIN || 'hemlock-oak.myshopify.com';
+
 
 // Initialize MySQL pool
 const pool = mysql.createPool({
