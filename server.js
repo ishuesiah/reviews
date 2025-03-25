@@ -7,7 +7,7 @@ const fetch = require('node-fetch'); // Install with: npm install node-fetch
 require('dotenv').config();
 
 const app = express();
-const port = process.env.PORT || 30387;
+const port = process.env.PORT || 3306;
 const SHOP_DOMAIN = process.env.SHOP_DOMAIN || 'hemlock-oak.myshopify.com';
 
 
@@ -17,6 +17,7 @@ const pool = mysql.createPool({
   user: process.env.MYSQL_USER || 'hemlockandoak',
   password: process.env.MYSQL_PASSWORD || 'jH3&wM0gH2a',
   database: process.env.MYSQL_DATABASE || 'referral_program_db',
+  port: process.env.MYSQL_PORT || 3306,
   ssl: { rejectUnauthorized: false },
   waitForConnections: true,
   connectionLimit: 10,
