@@ -257,10 +257,10 @@ async function createShopifyDiscountCode(amountOff) {
   const numericValue = parseFloat(amountOff.replace(/\D/g, '')) || 10;
   const code = `POINTS${numericValue}_${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
 
-  // CORRECTED VARIABLES FOR 2023-07 API VERSION
+  // CORRECTED VARIABLES FOR 2023-07 API
   const variables = {
     basicCodeDiscount: {
-      title: `Points Reward - ${numericValue} Off`,
+      title: `Points Reward - $${numericValue} Off`,
       code: code,
       startsAt: new Date().toISOString(),
       usageLimit: 1,
@@ -272,14 +272,17 @@ async function createShopifyDiscountCode(amountOff) {
         items: {
           all: true
         },
-        discountValue: {  // Changed structure
-          fixedAmount: {  // Correct field name
-            amount: numericValue.toFixed(2), // Must be string with 2 decimals
+        value: { // Direct value specification
+          fixedAmount: {
+            amount: numericValue.toFixed(2),
             currencyCode: "USD"
           }
         }
       },
-      discountType: "FIXED_AMOUNT"  // Required field
+      appliesTo: { // Required field
+        all: true
+      },
+      discountClass: "FIXED_AMOUNT" // Correct field name
     }
   };
 
@@ -293,16 +296,14 @@ async function createShopifyDiscountCode(amountOff) {
   });
 
   const responseData = await response.json();
-  
+
   if (responseData.errors) {
     console.error('GraphQL errors:', responseData.errors);
     throw new Error('Failed to create discount code');
   }
 
-  // Extract code from response
   return responseData.data.discountCodeBasicCreate.codeDiscountNode.codeDiscount.codes.edges[0].node.code;
 }
-
 
 // (Optional) Implement createShopifyGiftCard() similarly if you plan to support gift cards.
 
