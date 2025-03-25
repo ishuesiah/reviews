@@ -228,7 +228,7 @@ app.post('/api/referral/redeem', async (req, res) => {
 async function createShopifyDiscountCode(amountOff) {
   const adminApiUrl = 'https://hemlock-oak.myshopify.com/admin/api/2023-07/graphql.json';
   const adminApiToken = process.env.SHOPIFY_ADMIN_TOKEN;
-
+  
   const mutation = `
     mutation discountCodeBasicCreate($basicCodeDiscount: DiscountCodeBasicInput!) {
       discountCodeBasicCreate(basicCodeDiscount: $basicCodeDiscount) {
@@ -255,14 +255,14 @@ async function createShopifyDiscountCode(amountOff) {
       }
     }
   `;
-
-  // Example: fixed $X off everything in the store
+  
+  // Generate a unique code title
   const uniqueSuffix = Math.random().toString(36).substr(2, 5).toUpperCase();
   const codeTitle = `POINTS-${amountOff}-${uniqueSuffix}`;
-
-  // Parse numeric from something like "10OFF"
+  
+  // Extract numeric value from the string (e.g. "10OFF" -> 10)
   const numericValue = parseFloat(amountOff.replace(/\D/g, '')) || 10;
-
+  
   const variables = {
     basicCodeDiscount: {
       title: codeTitle,
@@ -270,18 +270,23 @@ async function createShopifyDiscountCode(amountOff) {
       usageLimit: 1,
       appliesOncePerCustomer: true,
       code: codeTitle,
-      customerSelection: { all: true },
+      customerSelection: {
+        all: true
+      },
       customerGets: {
-        items: { all: true },
+        items: {
+          all: true
+        },
         value: {
-          fixedAmount: {
-            amount: numericValue.toString(),
-            currencyCode: "USD"
+          fixedAmount: { // Use fixedAmount instead of money
+            amount: numericValue.toFixed(2), // Ensure it's a string like "10.00"
+            currencyCode: "USD"            // Adjust if your store uses a different currency
           }
         }
       }
     }
   };
+  
   const response = await fetch(adminApiUrl, {
     method: 'POST',
     headers: {
@@ -290,19 +295,19 @@ async function createShopifyDiscountCode(amountOff) {
     },
     body: JSON.stringify({ query: mutation, variables })
   });
-
+  
   const responseData = await response.json();
-
+  
   if (responseData.errors) {
     console.error('GraphQL errors:', responseData.errors);
     throw new Error('Failed to create discount code');
   }
-
+  
   const userErrors = responseData.data.discountCodeBasicCreate.userErrors;
   if (userErrors && userErrors.length) {
     throw new Error(userErrors[0].message);
   }
-
+  
   const codeNode =
     responseData.data.discountCodeBasicCreate.codeDiscountNode.codeDiscount.codes.edges[0].node;
   return codeNode.code;
