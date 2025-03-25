@@ -257,10 +257,10 @@ async function createShopifyDiscountCode(amountOff) {
   const numericValue = parseFloat(amountOff.replace(/\D/g, '')) || 10;
   const code = `POINTS${numericValue}_${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
 
-  // CORRECTED VARIABLES FOR 2023-07 API
+  // CORRECTED SCHEMA-COMPLIANT VARIABLES
   const variables = {
     basicCodeDiscount: {
-      title: `Points Reward - $${numericValue} Off`,
+      title: `$${numericValue} Off Reward`,
       code: code,
       startsAt: new Date().toISOString(),
       usageLimit: 1,
@@ -272,17 +272,19 @@ async function createShopifyDiscountCode(amountOff) {
         items: {
           all: true
         },
-        value: { // Direct value specification
+        value: {
           fixedAmount: {
             amount: numericValue.toFixed(2),
             currencyCode: "USD"
           }
         }
       },
-      appliesTo: { // Required field
-        all: true
-      },
-      discountClass: "FIXED_AMOUNT" // Correct field name
+      appliesTo: {  // Remove this field completely
+        productVariants: {  // Replace with actual product/variant IDs if needed
+          productVariantsToAdd: [],
+          productVariantsToRemove: []
+        }
+      }
     }
   };
 
