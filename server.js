@@ -17,6 +17,7 @@ const pool = mysql.createPool({
   user: process.env.MYSQL_USER || 'hemlockandoak',
   password: process.env.MYSQL_PASSWORD || 'jH3&wM0gH2a',
   database: process.env.MYSQL_DATABASE || 'referral_program_db',
+  ssl: { rejectUnauthorized: false },
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
