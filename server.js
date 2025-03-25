@@ -270,24 +270,18 @@ async function createShopifyDiscountCode(amountOff) {
       usageLimit: 1,
       appliesOncePerCustomer: true,
       code: codeTitle,
-      customerSelection: {
-        all: true
-      },
-      // The new approach: "customerGets" with a nested "money" field
+      customerSelection: { all: true },
       customerGets: {
-        items: {
-          all: true
-        },
+        items: { all: true },
         value: {
-          money: {
-            amount: numericValue.toString(), // must be a string
-            currencyCode: "USD"             // or your store's currency code
+          fixedAmount: {
+            amount: numericValue.toString(),
+            currencyCode: "USD"
           }
         }
       }
     }
   };
-
   const response = await fetch(adminApiUrl, {
     method: 'POST',
     headers: {
