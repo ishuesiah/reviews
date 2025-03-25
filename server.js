@@ -13,22 +13,63 @@ const SHOP_DOMAIN = process.env.SHOP_DOMAIN || 'hemlock-oak.myshopify.com';
 
 // Initialize MySQL pool
 const pool = mysql.createPool({
-  host: process.env.MYSQL_HOST || 'northamerica-northeast1-001.proxy.kinsta.app',
-  user: process.env.MYSQL_USER || 'hemlockandoak',
-  password: process.env.MYSQL_PASSWORD || 'jH3&wM0gH2a',
-  database: process.env.MYSQL_DATABASE || 'referral_program_db',
-  port: process.env.MYSQL_PORT || 3306,
-  ssl: { rejectUnauthorized: false }, // For testing; ideally use proper CA certificate
+  host: process.env.MYSQL_HOST,
+  user: process.env.MYSQL_USER,
+  password: process.env.MYSQL_PASSWORD,
+  database: process.env.MYSQL_DATABASE,
+  port: process.env.MYSQL_PORT,
+  ssl: {
+    // Kinsta requires this CA cert
+    ca: `-----BEGIN CERTIFICATE-----
+MIIDdzCCAl+gAwIBAgIEAgAAuTANBgkqhkiG9w0BAQUFADBaMQswCQYDVQQGEwJJ
+RTESMBAGA1UEChMJQmFsdGltb3JlMRMwEQYDVQQLEwpDeWJlclRydXN0MSIwIAYD
+VQQDExlCYWx0aW1vcmUgQ3liZXJUcnVzdCBSb290MB4XDTAwMDUxMjE4NDYwMFoX
+DTI1MDUxMjIzNTkwMFowWjELMAkGA1UEBhMCSUUxEjAQBgNVBAoTCUJhbHRpbW9y
+ZTETMBEGA1UECxMKQ3liZXJUcnVzdDEiMCAGA1UEAxMZQmFsdGltb3JlIEN5YmVy
+VHJ1c3QgUm9vdDCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAKMEuyKr
+mD1X6CZymrV51Cni4eiVgLGw41uOKymaZN+hXe2wCQVt2yguzmKiYv60iNoS6zjr
+IZ3AQSsBUnuId9Mcj8e6uYi1agnnc+gRQKfRzMpijS3ljwumUNKoUMMo6vWrJYeK
+mpYcqWe4PwzV9/lSEy/CG9VwcPCPwBLKBsua4dnKM3p31vjsufFoREJIE9LAwqSu
+XmD+tqYF/LTdB1kC1FkYmGP1pWPgkAx9XbIGevOF6uvUA65ehD5f/xXtabz5OTZy
+dc93Uk3zyZAsuT3lySNTPx8kmCFcB5kpvcY67Oduhjprl3RjM71oGDHweI12v/ye
+jl0qhqdNkNwnGjkCAwEAAaNFMEMwHQYDVR0OBBYEFOWdWTCCR1jMrPoIVDaGezq1
+BE3wMBIGA1UdEwEB/wQIMAYBAf8CAQMwDgYDVR0PAQH/BAQDAgEGMA0GCSqGSIb3
+DQEBBQUAA4IBAQCFDF2O5G9RaEIFoN27TyclhAO992T9Ldcw46QQF+vaKSm2eT92
+9hkTI7gQCvlYpNRhcL0EYWoSihfVCr3FvDB81ukMJY2GQE/szKN+OMY3EU/t3Wgx
+jkzSswF07r51XgdIGn9w/xZchMB5hbgF/X++ZRGjD8ACtPhSNzkE1akxehi/oCr0
+Epn3o0WC4zxe9Z2etciefC7IpJ5OCBRLbf1wbWsaY71k5h+3zvDyny67G7fyUIhz
+ksLi4xaNmjICq44Y3ekQEe5+NauQrz4wlHrQMz2nZQ/1/I6eYs9HRCwBXbsdtTLS
+R9I4LtD+gdwyah617jzV/OeBHRnDJELqYzmp
+-----END CERTIFICATE-----`
+  },
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
-  connectTimeout: 20000,          // Increase timeout to 20 seconds
-  enableKeepAlive: true,          // Keep connections alive
-  keepAliveInitialDelay: 10000,   // Wait 10 seconds before sending keep-alive pings
+  connectTimeout: 30000, // Increased to 30 seconds
+  enableKeepAlive: true,
+  keepAliveInitialDelay: 10000,
+  // Add connection retry settings
+  acquireTimeout: 30000,
+  reconnect: true
 });
 
+// Add these after pool creation
+pool.on('connection', (connection) => {
+  console.log('New DB connection established');
+});
 
+pool.on('acquire', (connection) => {
+  console.log('Connection %d acquired', connection.threadId);
+});
 
+pool.on('release', (connection) => {
+  console.log('Connection %d released', connection.threadId);
+});
+
+pool.on('error', (err) => {
+  console.error('MySQL pool error:', err);
+  // Implement retry logic here if needed
+});
 
 // Enable CORS for your Shopify store domain
 app.use(cors({
@@ -119,7 +160,12 @@ app.get('/api/customer-reviews', async (req, res) => {
 // ...
 
 app.post('/api/referral/redeem', async (req, res) => {
+  let connection;
   try {
+    // Get connection from pool
+    connection = await pool.getConnection();
+    console.log("DEBUG: Acquired connection from pool");
+    
     // Log the incoming request body for debugging
     console.log("DEBUG: Incoming redeem request body:", req.body);
 
@@ -134,7 +180,7 @@ app.post('/api/referral/redeem', async (req, res) => {
 
     // 1) Find user in MySQL using the pool
     console.log("DEBUG: Running query: SELECT * FROM users WHERE email = ?", email);
-    const [rows] = await pool.execute('SELECT * FROM users WHERE email = ?', [email]);
+    const [rows] = await connection.execute('SELECT * FROM users WHERE email = ?', [email]);
 
     console.log("DEBUG: Query result rows:", rows);
 
@@ -190,6 +236,11 @@ app.post('/api/referral/redeem', async (req, res) => {
     // Catch any error that occurs in the try block
     console.error('Error redeeming points:', error);
     return res.status(500).json({ error: error.message });
+  } finally {
+    if (connection) {
+      await connection.release();
+      console.log("DEBUG: Released connection back to pool");
+    }
   }
 });
 
