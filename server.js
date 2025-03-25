@@ -115,52 +115,74 @@ app.get('/api/customer-reviews', async (req, res) => {
 
 app.post('/api/referral/redeem', async (req, res) => {
   try {
+    // Log the incoming request body for debugging
+    console.log("DEBUG: Incoming redeem request body:", req.body);
+
     const { email, pointsToRedeem, redeemType, redeemValue } = req.body;
+
+    // Check for missing parameters
     if (!email || !pointsToRedeem) {
+      console.log("DEBUG: Missing email or pointsToRedeem");
       return res.status(400).json({ error: 'Missing email or pointsToRedeem.' });
     }
-    
+    console.log(`DEBUG: Attempting to redeem ${pointsToRedeem} points for email=${email}`);
+
     // 1) Find user in MySQL using the pool
+    console.log("DEBUG: Running query: SELECT * FROM users WHERE email = ?", email);
     const [rows] = await pool.execute('SELECT * FROM users WHERE email = ?', [email]);
+
+    console.log("DEBUG: Query result rows:", rows);
+
     if (rows.length === 0) {
+      console.log(`DEBUG: No user found for email=${email}`);
       return res.status(404).json({ error: 'User not found.' });
     }
     const user = rows[0];
-    
+    console.log("DEBUG: Found user:", user);
+
     // 2) Check if the user has enough points
+    console.log(`DEBUG: User has ${user.points} points. Need ${pointsToRedeem}.`);
     if (user.points < pointsToRedeem) {
+      console.log("DEBUG: Not enough points to redeem.");
       return res.status(400).json({ error: 'Not enough points to redeem.' });
     }
-    
+
     // 3) Subtract redeemed points from the user's balance
     const newPoints = user.points - pointsToRedeem;
+    console.log(`DEBUG: Subtracting points. New points balance will be ${newPoints}`);
     await pool.execute('UPDATE users SET points = ? WHERE user_id = ?', [newPoints, user.user_id]);
-    
+
     // 4) Log the redemption
     const insertActionSql = `
       INSERT INTO user_actions (user_id, action_type, points_awarded)
       VALUES (?, ?, ?)
     `;
+    console.log(`DEBUG: Inserting user action: redeem-${redeemType} for user_id=${user.user_id}, points=-${pointsToRedeem}`);
     await pool.execute(insertActionSql, [user.user_id, `redeem-${redeemType}`, -pointsToRedeem]);
-    
-    // 5) Create a discount code via Shopify Admin API
+
+    // 5) Create a discount code (or gift card) via Shopify Admin API
     let generatedCode = '';
     if (redeemType === 'discount') {
+      console.log(`DEBUG: Creating discount code for redeemValue=${redeemValue}`);
       generatedCode = await createShopifyDiscountCode(redeemValue);
     } else if (redeemType === 'gift_card') {
+      console.log(`DEBUG: Creating gift card for redeemValue=${redeemValue}`);
       generatedCode = await createShopifyGiftCard(redeemValue); // Implement if needed.
     } else {
+      console.log(`DEBUG: Unrecognized redeemType, defaulting to discount code for redeemValue=${redeemValue}`);
       generatedCode = await createShopifyDiscountCode(redeemValue);
     }
-    
+
     // 6) Return the new code and updated points balance
+    console.log(`DEBUG: Successfully redeemed. Returning code=${generatedCode}, newPoints=${newPoints}`);
     return res.json({
       message: 'Redeemed points successfully.',
       discountCode: generatedCode,
       newPoints: newPoints
     });
-    
+
   } catch (error) {
+    // Catch any error that occurs in the try block
     console.error('Error redeeming points:', error);
     return res.status(500).json({ error: error.message });
   }
