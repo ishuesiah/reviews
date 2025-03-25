@@ -260,6 +260,9 @@ async function createShopifyDiscountCode(amountOff) {
   const uniqueSuffix = Math.random().toString(36).substr(2, 5).toUpperCase();
   const codeTitle = `POINTS-${amountOff}-${uniqueSuffix}`;
 
+  // Parse numeric from something like "10OFF"
+  const numericValue = parseFloat(amountOff.replace(/\D/g, '')) || 10;
+
   const variables = {
     basicCodeDiscount: {
       title: codeTitle,
@@ -270,13 +273,16 @@ async function createShopifyDiscountCode(amountOff) {
       customerSelection: {
         all: true
       },
+      // The new approach: "customerGets" with a nested "money" field
       customerGets: {
         items: {
           all: true
         },
         value: {
-          // If "amountOff" is "10OFF", parse the numeric part "10"
-          amount: parseFloat(amountOff.replace(/\D/g, '')) || 10
+          money: {
+            amount: numericValue.toString(), // must be a string
+            currencyCode: "USD"             // or your store's currency code
+          }
         }
       }
     }
@@ -307,6 +313,7 @@ async function createShopifyDiscountCode(amountOff) {
     responseData.data.discountCodeBasicCreate.codeDiscountNode.codeDiscount.codes.edges[0].node;
   return codeNode.code;
 }
+
 
 
 // (Optional) Implement createShopifyGiftCard() similarly if you plan to support gift cards.
