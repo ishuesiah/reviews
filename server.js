@@ -18,11 +18,15 @@ const pool = mysql.createPool({
   password: process.env.MYSQL_PASSWORD || 'jH3&wM0gH2a',
   database: process.env.MYSQL_DATABASE || 'referral_program_db',
   port: process.env.MYSQL_PORT || 3306,
-  ssl: { rejectUnauthorized: false },
+  ssl: { rejectUnauthorized: false }, // For testing; ideally use proper CA certificate
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
+  connectTimeout: 20000,          // Increase timeout to 20 seconds
+  enableKeepAlive: true,          // Keep connections alive
+  keepAliveInitialDelay: 10000,   // Wait 10 seconds before sending keep-alive pings
 });
+
 
 
 
