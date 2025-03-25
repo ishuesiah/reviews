@@ -226,85 +226,82 @@ app.post('/api/referral/redeem', async (req, res) => {
  * Helper function to create a discount code via Shopify Admin API
  ********************************************************************/
 async function createShopifyDiscountCode(amountOff) {
-  const adminApiUrl = 'https://hemlock-oak.myshopify.com/admin/api/2023-07/graphql.json';
+  const adminApiUrl = 'https://hemlock-oak.myshopify.com/admin/api/2025-01';
   const adminApiToken = process.env.SHOPIFY_ADMIN_TOKEN;
 
-  const mutation = `
-    mutation discountCodeBasicCreate($basicCodeDiscount: DiscountCodeBasicInput!) {
-      discountCodeBasicCreate(basicCodeDiscount: $basicCodeDiscount) {
-        codeDiscountNode {
-          codeDiscount {
-            __typename
-            ... on DiscountCodeBasic {
-              codes(first: 1) {
-                edges {
-                  node {
-                    code
-                  }
-                }
-              }
-            }
-          }
-        }
-        userErrors {
-          field
-          message
-        }
-      }
-    }
-  `;
-
+  // Parse the numeric value from input like "10OFF"
   const numericValue = parseFloat(amountOff.replace(/\D/g, '')) || 10;
-  const code = `POINTS${numericValue}_${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
+  const randomSuffix = Math.random().toString(36).substr(2, 5).toUpperCase();
+  const discountCode = `POINTS${numericValue}_${randomSuffix}`;
 
-  // CORRECTED SCHEMA-COMPLIANT VARIABLES
-  const variables = {
-    basicCodeDiscount: {
-      title: `$${numericValue} Off Reward`,
-      code: code,
-      startsAt: new Date().toISOString(),
-      usageLimit: 1,
-      appliesOncePerCustomer: true,
-      customerSelection: {
-        all: true
+  try {
+    // 1. Create Price Rule
+    const priceRuleResponse = await fetch(`${adminApiUrl}/price_rules.json`, {
+      method: 'POST',
+      headers: {
+        'X-Shopify-Access-Token': adminApiToken,
+        'Content-Type': 'application/json'
       },
-      customerGets: {
-        items: {
-          all: true
-        },
-        value: {
-          fixedAmount: {
-            amount: numericValue.toFixed(2),
-            currencyCode: "USD"
-          }
+      body: JSON.stringify({
+        price_rule: {
+          title: `$${numericValue} Points Reward`,
+          target_type: "line_item",
+          target_selection: "all",
+          allocation_method: "across",
+          value_type: "fixed_amount",
+          value: `-${numericValue.toFixed(2)}`, // Negative value for discount
+          customer_selection: "all",
+          starts_at: new Date().toISOString(),
+          usage_limit: 1,
+          once_per_customer: true
         }
-      },
-      appliesTo: {  // Remove this field completely
-        productVariants: {  // Replace with actual product/variant IDs if needed
-          productVariantsToAdd: [],
-          productVariantsToRemove: []
-        }
-      }
+      })
+    });
+
+    if (!priceRuleResponse.ok) {
+      const error = await priceRuleResponse.json();
+      throw new Error(`Price rule creation failed: ${error.errors}`);
     }
-  };
 
-  const response = await fetch(adminApiUrl, {
-    method: 'POST',
-    headers: {
-      'X-Shopify-Access-Token': adminApiToken,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({ query: mutation, variables })
-  });
+    const priceRuleData = await priceRuleResponse.json();
+    const priceRuleId = priceRuleData.price_rule.id;
 
-  const responseData = await response.json();
+    // 2. Create Discount Code under the Price Rule
+    const discountResponse = await fetch(
+      `${adminApiUrl}/price_rules/${priceRuleId}/discount_codes.json`,
+      {
+        method: 'POST',
+        headers: {
+          'X-Shopify-Access-Token': adminApiToken,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          discount_code: {
+            code: discountCode,
+            usage_count: 0
+          }
+        })
+      }
+    );
 
-  if (responseData.errors) {
-    console.error('GraphQL errors:', responseData.errors);
+    if (!discountResponse.ok) {
+      const error = await discountResponse.json();
+      // Clean up price rule if discount creation fails
+      await fetch(`${adminApiUrl}/price_rules/${priceRuleId}.json`, {
+        method: 'DELETE',
+        headers: {
+          'X-Shopify-Access-Token': adminApiToken
+        }
+      });
+      throw new Error(`Discount code creation failed: ${error.errors}`);
+    }
+
+    return discountCode;
+
+  } catch (error) {
+    console.error('Discount creation error:', error);
     throw new Error('Failed to create discount code');
   }
-
-  return responseData.data.discountCodeBasicCreate.codeDiscountNode.codeDiscount.codes.edges[0].node.code;
 }
 
 // (Optional) Implement createShopifyGiftCard() similarly if you plan to support gift cards.
