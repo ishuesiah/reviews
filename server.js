@@ -263,6 +263,7 @@ async function createShopifyDiscountCode(amountOff) {
           shipping_discounts: true
         }
       }
+      })  
     });
 
     // Improved error handling
