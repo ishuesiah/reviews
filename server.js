@@ -257,7 +257,7 @@ async function createShopifyDiscountCode(amountOff) {
           }
           usageLimit: 1
           appliesOncePerCustomer: true
-          codes: ["${discountCode}"]
+          codes: [{ code: "${discountCode}" }]
         }
       ) {
         userErrors {
@@ -275,6 +275,7 @@ async function createShopifyDiscountCode(amountOff) {
       }
     }
   `;
+
 
   try {
     const response = await fetch(adminApiUrl, {
