@@ -251,13 +251,18 @@ async function createShopifyDiscountCode(amountOff) {
           title: `$${numericValue} Points Reward`,
           target_type: "line_item",
           target_selection: "all",
-          allocation_method: "across",
+          allocation_method: "each",
           value_type: "fixed_amount",
           value: `-${numericValue.toFixed(2)}`, // Negative value for discount
           customer_selection: "all",
           starts_at: new Date().toISOString(),
           usage_limit: 1,
-          once_per_customer: true
+          once_per_customer: true,
+          prerequisite_to_entitlement_quantity_ratio: {
+            prerequisite_quantity: 0,
+            entitled_quantity: 1
+          },
+          entitlement_discount_application_strategy: "APPLY_TO_ENTITLED_ITEMS"
         }
       })
     });
