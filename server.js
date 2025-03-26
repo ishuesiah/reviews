@@ -230,11 +230,11 @@ app.post('/api/referral/redeem', async (req, res) => {
  * Helper function to create a discount code via Shopify Admin API
  ********************************************************************/
 async function createShopifyDiscountCode(amountOff) {
-  const adminApiUrl = 'https://hemlock-oak.myshopify.com/admin/api/2024-10/graphql.json'; // Use latest stable version
+  const adminApiUrl = 'https://hemlock-oak.myshopify.com/admin/api/2024-10/graphql.json';
   const adminApiToken = process.env.SHOPIFY_ADMIN_TOKEN;
 
   const numericValue = parseFloat(amountOff.replace(/\D/g, '')) || 10;
-  const discountCode = `POINTS${numericValue}PCT_${Math.random().toString(36).substr(2,5).toUpperCase()}`;
+  const discountCode = `POINTS${numericValue}PCT_${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
 
   const mutation = `
     mutation {
@@ -244,9 +244,7 @@ async function createShopifyDiscountCode(amountOff) {
           startsAt: "${new Date().toISOString()}"
           customerGets: {
             value: {
-              percentage: {
-                value: ${numericValue}
-              }
+              percentage: ${numericValue}
             }
             items: {
               all: true
@@ -259,16 +257,20 @@ async function createShopifyDiscountCode(amountOff) {
           }
           usageLimit: 1
           appliesOncePerCustomer: true
+          codes: ["${discountCode}"]
         }
-        code: "${discountCode}"
       ) {
         userErrors {
           field
           message
         }
-        discountCode {
-          code
+        discountCodeBasic {
           id
+          codes(first: 1) {
+            nodes {
+              code
+            }
+          }
         }
       }
     }
@@ -284,15 +286,16 @@ async function createShopifyDiscountCode(amountOff) {
       body: JSON.stringify({ query: mutation })
     });
 
-    const responseData = await response.json();
+    const result = await response.json();
 
-    if (responseData.errors || responseData.data.discountCodeBasicCreate.userErrors.length > 0) {
-      const errors = responseData.errors || responseData.data.discountCodeBasicCreate.userErrors;
-      console.error('GraphQL Errors:', JSON.stringify(errors, null, 2));
-      throw new Error('Discount creation failed: ' + JSON.stringify(errors));
+    const userErrors = result.data?.discountCodeBasicCreate?.userErrors;
+    if (userErrors && userErrors.length > 0) {
+      console.error('Shopify Discount Code Errors:', userErrors);
+      throw new Error('Discount creation failed: ' + userErrors.map(e => e.message).join(', '));
     }
 
-    return responseData.data.discountCodeBasicCreate.discountCode.code;
+    const codeNode = result.data?.discountCodeBasicCreate?.discountCodeBasic?.codes?.nodes?.[0];
+    return codeNode?.code || discountCode;
 
   } catch (error) {
     console.error('Discount creation error (GraphQL):', error.message);
