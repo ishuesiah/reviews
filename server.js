@@ -233,13 +233,13 @@ async function createShopifyDiscountCode(amountOff) {
   const adminApiUrl = 'https://hemlock-oak.myshopify.com/admin/api/2025-01';
   const adminApiToken = process.env.SHOPIFY_ADMIN_TOKEN;
 
-  // Parse the numeric value from input like "10OFF"
+  // Parse the percentage value from input like "10%OFF"
   const numericValue = parseFloat(amountOff.replace(/\D/g, '')) || 10;
   const randomSuffix = Math.random().toString(36).substr(2, 5).toUpperCase();
-  const discountCode = `POINTS${numericValue}_${randomSuffix}`;
+  const discountCode = `POINTS${numericValue}PCT_${randomSuffix}`; // Changed code format
 
   try {
-    // 1. Create Price Rule
+    // 1. Create Price Rule with percentage settings
     const priceRuleResponse = await fetch(`${adminApiUrl}/price_rules.json`, {
       method: 'POST',
       headers: {
@@ -248,12 +248,12 @@ async function createShopifyDiscountCode(amountOff) {
       },
       body: JSON.stringify({
         price_rule: {
-          title: `$${numericValue} Points Reward`,
+          title: `${numericValue}% Points Reward`, // Added % symbol
           target_type: "line_item",
           target_selection: "all",
           allocation_method: "each",
-          value_type: "fixed_amount",
-          value: `-${numericValue.toFixed(2)}`, // Negative value for discount
+          value_type: "percentage", // Changed to percentage
+          value: `${numericValue}.0`, // Positive value with decimal
           customer_selection: "all",
           starts_at: new Date().toISOString(),
           usage_limit: 1,
@@ -275,7 +275,7 @@ async function createShopifyDiscountCode(amountOff) {
     const priceRuleData = await priceRuleResponse.json();
     const priceRuleId = priceRuleData.price_rule.id;
 
-    // 2. Create Discount Code under the Price Rule
+    // 2. Create Discount Code (rest of the function remains the same)
     const discountResponse = await fetch(
       `${adminApiUrl}/price_rules/${priceRuleId}/discount_codes.json`,
       {
@@ -295,12 +295,9 @@ async function createShopifyDiscountCode(amountOff) {
 
     if (!discountResponse.ok) {
       const error = await discountResponse.json();
-      // Clean up price rule if discount creation fails
       await fetch(`${adminApiUrl}/price_rules/${priceRuleId}.json`, {
         method: 'DELETE',
-        headers: {
-          'X-Shopify-Access-Token': adminApiToken
-        }
+        headers: {'X-Shopify-Access-Token': adminApiToken}
       });
       throw new Error(`Discount code creation failed: ${error.errors}`);
     }
