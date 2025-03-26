@@ -288,7 +288,7 @@ async function createShopifyDiscountCode(amountOff) {
     });
 
     const result = await response.json();
-    console.error('GraphQL Discount Errors:', JSON.stringify(errors, null, 2));
+    console.log(JSON.stringify(result, null, 2));
     const errors = result?.data?.discountCodeBasicCreate?.userErrors || [];
     if (errors.length > 0) {
       console.error('GraphQL Discount Errors:', JSON.stringify(errors, null, 2));
