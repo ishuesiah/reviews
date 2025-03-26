@@ -237,41 +237,41 @@ async function createShopifyDiscountCode(amountOff) {
   const discountCode = `POINTS${numericValue}PCT_${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
 
   // Corrected GraphQL mutation
-  const mutation = `
-    mutation {
-      discountCodeBasicCreate(
-        basicCodeDiscount: {
-          title: "${numericValue}% Off Reward"
-          startsAt: "${new Date().toISOString()}"
-          customerGets: {
-            value: {
-              percentage: ${numericValue.toFixed(2)}  // Correct field name
-            }
-            items: {
-              all: true
-            }
+const mutation = `
+  mutation {
+    discountCodeBasicCreate(
+      basicCodeDiscount: {
+        title: "${numericValue}% Off Reward",
+        startsAt: "${new Date().toISOString()}",
+        customerGets: {
+          value: {
+            percentage: ${numericValue.toFixed(2)}
+          },
+          items: {
+            all: true
           }
-          combinesWith: {
-            orderDiscounts: true
-            productDiscounts: true
-            shippingDiscounts: true
-          }
-          usageLimit: 1
-          appliesOncePerCustomer: true
-          code: "${discountCode}"
-        }
-      ) {
-        userErrors {
-          field
-          message
-        }
-        discountCodeBasic {
-          id
-          code
-        }
+        },  // Added comma here
+        combinesWith: {
+          orderDiscounts: true,
+          productDiscounts: true,
+          shippingDiscounts: true
+        },
+        usageLimit: 1,
+        appliesOncePerCustomer: true,
+        code: "${discountCode}"
+      }
+    ) {
+      userErrors {
+        field
+        message
+      }
+      discountCodeBasic {
+        id
+        code
       }
     }
-  `;
+  }
+`;
 
   try {
     const response = await fetch(adminApiUrl, {
