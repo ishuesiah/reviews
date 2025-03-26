@@ -134,7 +134,6 @@ app.get('/api/customer-reviews', async (req, res) => {
  ********************************************************************/
 
 // ...
-
 app.post('/api/referral/redeem', async (req, res) => {
   let connection;
   try {
@@ -157,7 +156,6 @@ app.post('/api/referral/redeem', async (req, res) => {
     // 1) Find user in MySQL using the pool
     console.log("DEBUG: Running query: SELECT * FROM users WHERE email = ?", email);
     const [rows] = await connection.execute('SELECT * FROM users WHERE email = ?', [email]);
-
     console.log("DEBUG: Query result rows:", rows);
 
     if (rows.length === 0) {
@@ -177,7 +175,7 @@ app.post('/api/referral/redeem', async (req, res) => {
     // 3) Subtract redeemed points from the user's balance
     const newPoints = user.points - pointsToRedeem;
     console.log(`DEBUG: Subtracting points. New points balance will be ${newPoints}`);
-    await pool.execute('UPDATE users SET points = ? WHERE user_id = ?', [newPoints, user.user_id]);
+    await connection.execute('UPDATE users SET points = ? WHERE user_id = ?', [newPoints, user.user_id]);
 
     // 4) Log the redemption
     const insertActionSql = `
@@ -185,7 +183,7 @@ app.post('/api/referral/redeem', async (req, res) => {
       VALUES (?, ?, ?)
     `;
     console.log(`DEBUG: Inserting user action: redeem-${redeemType} for user_id=${user.user_id}, points=-${pointsToRedeem}`);
-    await pool.execute(insertActionSql, [user.user_id, `redeem-${redeemType}`, -pointsToRedeem]);
+    await connection.execute(insertActionSql, [user.user_id, `redeem-${redeemType}`, -pointsToRedeem]);
 
     // 5) Create a discount code (or gift card) via Shopify Admin API
     let generatedCode = '';
@@ -199,8 +197,14 @@ app.post('/api/referral/redeem', async (req, res) => {
       console.log(`DEBUG: Unrecognized redeemType, defaulting to discount code for redeemValue=${redeemValue}`);
       generatedCode = await createShopifyDiscountCode(redeemValue);
     }
+    console.log(`DEBUG: Discount code generated: ${generatedCode}`);
 
-    // 6) Return the new code and updated points balance
+    // 6) Save the generated discount code to the new column in the users table.
+    // Ensure that your users table has a column called "discount_code" (adjust column name if different)
+    console.log(`DEBUG: Saving discount code ${generatedCode} to user_id=${user.user_id}`);
+    await connection.execute('UPDATE users SET discount_code = ? WHERE user_id = ?', [generatedCode, user.user_id]);
+
+    // 7) Return the new code and updated points balance
     console.log(`DEBUG: Successfully redeemed. Returning code=${generatedCode}, newPoints=${newPoints}`);
     return res.json({
       message: 'Redeemed points successfully.',
@@ -209,7 +213,6 @@ app.post('/api/referral/redeem', async (req, res) => {
     });
 
   } catch (error) {
-    // Catch any error that occurs in the try block
     console.error('Error redeeming points:', error);
     return res.status(500).json({ error: error.message });
   } finally {
@@ -219,6 +222,7 @@ app.post('/api/referral/redeem', async (req, res) => {
     }
   }
 });
+
 
 
 
