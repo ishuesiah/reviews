@@ -245,8 +245,6 @@ async function createShopifyDiscountCode(amountOff) {
             __typename
             ... on DiscountCodeBasic {
               title
-              summary
-              status
               codes(first: 1) {
                 nodes {
                   code
@@ -266,13 +264,15 @@ async function createShopifyDiscountCode(amountOff) {
   const variables = {
     basicCodeDiscount: {
       title: `${numericValue}% Off Points Reward`,
-      codes: [generatedCode],
+      code: generatedCode, // Changed from 'codes' array to 'code' string
       startsAt: new Date().toISOString(),
       customerGets: {
         value: {
           percentage: numericValue
         },
-        appliesOnEachItem: true
+        items: { // Correct field structure
+          all: true
+        }
       },
       combinesWith: {
         orderDiscounts: true,
@@ -280,7 +280,7 @@ async function createShopifyDiscountCode(amountOff) {
         shippingDiscounts: true
       },
       usageLimit: 1,
-      oncePerCustomer: true
+      appliesOncePerCustomer: true // Correct field name
     }
   };
 
@@ -297,12 +297,12 @@ async function createShopifyDiscountCode(amountOff) {
     const result = await response.json();
 
     if (result.errors || result.data?.discountCodeBasicCreate?.userErrors?.length > 0) {
-      console.error('Discount creation error (GraphQL):', JSON.stringify(result, null, 2));
-      throw new Error('Failed to create stackable discount code');
+      console.error('Discount creation error:', JSON.stringify(result, null, 2));
+      throw new Error('Failed to create discount code');
     }
 
-    const codeNode = result.data.discountCodeBasicCreate.codeDiscountNode?.codeDiscount?.codes?.nodes?.[0]?.code;
-    return codeNode || generatedCode; // Fallback to generated name if somehow not returned
+    return result.data.discountCodeBasicCreate.codeDiscountNode.codeDiscount.codes.nodes[0].code;
+    
   } catch (error) {
     console.error('Discount creation error:', error.message);
     throw new Error('Failed to create discount code');
