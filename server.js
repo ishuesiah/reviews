@@ -230,7 +230,7 @@ app.post('/api/referral/redeem', async (req, res) => {
  * Helper function to create a discount code via Shopify Admin API
  ********************************************************************/
 async function createShopifyDiscountCode(amountOff) {
-  const adminApiUrl = 'https://hemlock-oak.myshopify.com/admin/api/2024-04/graphql.json'; // Updated to valid API version
+  const adminApiUrl = 'https://hemlock-oak.myshopify.com/admin/api/2024-04/graphql.json';
   const adminApiToken = process.env.SHOPIFY_ADMIN_TOKEN;
 
   const numericValue = parseFloat(amountOff.replace(/\D/g, '')) || 10;
@@ -241,11 +241,11 @@ async function createShopifyDiscountCode(amountOff) {
     mutation {
       discountCodeBasicCreate(
         basicCodeDiscount: {
-          title: "${numericValue}% Points Reward"
+          title: "${numericValue}% Off Reward"
           startsAt: "${new Date().toISOString()}"
           customerGets: {
             value: {
-              discountPercentage: ${numericValue}  // Correct field name
+              percentage: ${numericValue.toFixed(2)}  // Correct field name
             }
             items: {
               all: true
@@ -258,7 +258,7 @@ async function createShopifyDiscountCode(amountOff) {
           }
           usageLimit: 1
           appliesOncePerCustomer: true
-          code: "${discountCode}"  // Correct field structure
+          code: "${discountCode}"
         }
       ) {
         userErrors {
@@ -285,17 +285,16 @@ async function createShopifyDiscountCode(amountOff) {
 
     const result = await response.json();
 
-    // Improved error handling
     if (result.errors) {
-      console.error('GraphQL Errors:', result.errors);
-      throw new Error('GraphQL schema errors');
+      console.error('GraphQL Schema Errors:', result.errors);
+      throw new Error('Invalid GraphQL schema');
     }
 
     const userErrors = result.data?.discountCodeBasicCreate?.userErrors;
-  if (userErrors?.length > 0) {
-  console.error('Discount Creation Errors:', userErrors);
-  throw new Error(userErrors.map(e => `${e.field}: ${e.message}`).join(', ')); // Added closing )
-}
+    if (userErrors?.length > 0) {
+      console.error('Discount Creation Errors:', userErrors);
+      throw new Error(userErrors.map(e => `${e.field}: ${e.message}`).join(', '));
+    }
 
     return result.data?.discountCodeBasicCreate?.discountCodeBasic?.code || discountCode;
 
@@ -304,7 +303,6 @@ async function createShopifyDiscountCode(amountOff) {
     throw new Error('Failed to create Shopify discount: ' + error.message);
   }
 }
-
 // (Optional) Implement createShopifyGiftCard() similarly if you plan to support gift cards.
 
 // Start the server
