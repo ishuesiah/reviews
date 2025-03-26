@@ -230,54 +230,59 @@ app.post('/api/referral/redeem', async (req, res) => {
  * Helper function to create a discount code via Shopify Admin API
  ********************************************************************/
 async function createShopifyDiscountCode(amountOff) {
-  const adminApiUrl = 'https://hemlock-oak.myshopify.com/admin/api/2024-10/graphql.json'; // Update version if needed
+  const adminApiUrl = 'https://hemlock-oak.myshopify.com/admin/api/2024-10/graphql.json';
   const adminApiToken = process.env.SHOPIFY_ADMIN_TOKEN;
 
   const numericValue = parseFloat(amountOff.replace(/\D/g, '')) || 10;
-  const discountCode = `POINTS${numericValue}PCT_${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
+  const generatedCode = `POINTS${numericValue}PCT_${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
 
   const mutation = `
-mutation {
-  discountCodeBasicCreate(basicCodeDiscount: {
-    title: "10% Points Reward",
-    code: "POINTS10PCT_WDPEK",
-    startsAt: "2025-03-26T00:00:00Z",
-    customerGets: {
-      value: {
-        percentage: 10.0
-      }
-    },
-    appliesOncePerCustomer: true,
-    usageLimit: 1,
-    combinesWith: {
-      orderDiscounts: true,
-      productDiscounts: true,
-      shippingDiscounts: true
-    }
-  }) {
-    codeDiscountNode {
-      id
-      codeDiscount {
-        ... on DiscountCodeBasic {
+    mutation discountCodeBasicCreate($basicCodeDiscount: DiscountCodeBasicInput!) {
+      discountCodeBasicCreate(basicCodeDiscount: $basicCodeDiscount) {
+        codeDiscountNode {
           id
-          title
-          status
-          codeDiscountCodes(first: 1) {
-            nodes {
-              code
+          codeDiscount {
+            __typename
+            ... on DiscountCodeBasic {
+              title
+              summary
+              status
+              codes(first: 1) {
+                nodes {
+                  code
+                }
+              }
             }
           }
         }
+        userErrors {
+          field
+          message
+        }
       }
     }
-    userErrors {
-      field
-      message
-    }
-  }
-}
-
   `;
+
+  const variables = {
+    basicCodeDiscount: {
+      title: `${numericValue}% Off Points Reward`,
+      codes: [generatedCode],
+      startsAt: new Date().toISOString(),
+      customerGets: {
+        value: {
+          percentage: numericValue
+        },
+        appliesOnEachItem: true
+      },
+      combinesWith: {
+        orderDiscounts: true,
+        productDiscounts: true,
+        shippingDiscounts: true
+      },
+      usageLimit: 1,
+      oncePerCustomer: true
+    }
+  };
 
   try {
     const response = await fetch(adminApiUrl, {
@@ -286,24 +291,23 @@ mutation {
         'Content-Type': 'application/json',
         'X-Shopify-Access-Token': adminApiToken
       },
-      body: JSON.stringify({ query: mutation })
+      body: JSON.stringify({ query: mutation, variables })
     });
 
     const result = await response.json();
-    console.log(JSON.stringify(result, null, 2));
-    const errors = result?.data?.discountCodeBasicCreate?.userErrors || [];
-    if (errors.length > 0) {
-      console.error('GraphQL Discount Errors:', JSON.stringify(errors, null, 2));
+
+    if (result.errors || result.data?.discountCodeBasicCreate?.userErrors?.length > 0) {
+      console.error('Discount creation error (GraphQL):', JSON.stringify(result, null, 2));
       throw new Error('Failed to create stackable discount code');
     }
 
-    return discountCode;
+    const codeNode = result.data.discountCodeBasicCreate.codeDiscountNode?.codeDiscount?.codes?.nodes?.[0]?.code;
+    return codeNode || generatedCode; // Fallback to generated name if somehow not returned
   } catch (error) {
-    console.error('Discount creation error (GraphQL):', error);
-    throw new Error('Failed to create stackable discount code');
+    console.error('Discount creation error:', error.message);
+    throw new Error('Failed to create discount code');
   }
 }
-
 
 // (Optional) Implement createShopifyGiftCard() similarly if you plan to support gift cards.
 
