@@ -237,44 +237,46 @@ async function createShopifyDiscountCode(amountOff) {
   const discountCode = `POINTS${numericValue}PCT_${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
 
   const mutation = `
-    mutation {
-      discountCodeBasicCreate(basicCodeDiscount: {
-        title: "${numericValue}% Points Reward",
-        code: "${discountCode}",
-        startsAt: "${new Date().toISOString()}",
-        customerGets: {
-          value: {
-            percentage: ${numericValue}
-          }
-        },
-        appliesOncePerCustomer: true,
-        usageLimit: 1,
-        combinesWith: {
-          orderDiscounts: true,
-          productDiscounts: true,
-          shippingDiscounts: true
-        }
-      }) {
-        codeDiscountNode {
+mutation {
+  discountCodeBasicCreate(basicCodeDiscount: {
+    title: "10% Points Reward",
+    code: "POINTS10PCT_WDPEK",
+    startsAt: "2025-03-26T00:00:00Z",
+    customerGets: {
+      value: {
+        percentage: 10.0
+      }
+    },
+    appliesOncePerCustomer: true,
+    usageLimit: 1,
+    combinesWith: {
+      orderDiscounts: true,
+      productDiscounts: true,
+      shippingDiscounts: true
+    }
+  }) {
+    codeDiscountNode {
+      id
+      codeDiscount {
+        ... on DiscountCodeBasic {
           id
-          codeDiscount {
-            ... on DiscountCodeBasic {
-              title
+          title
+          status
+          codeDiscountCodes(first: 1) {
+            nodes {
               code
-              combinesWith {
-                orderDiscounts
-                productDiscounts
-                shippingDiscounts
-              }
             }
           }
         }
-        userErrors {
-          field
-          message
-        }
       }
     }
+    userErrors {
+      field
+      message
+    }
+  }
+}
+
   `;
 
   try {
