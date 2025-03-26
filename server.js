@@ -315,3 +315,4 @@ async function createShopifyDiscountCode(amountOff) {
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
   console.log(`Configured for shop: ${SHOP_DOMAIN}`);
+});
