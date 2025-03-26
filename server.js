@@ -264,13 +264,16 @@ async function createShopifyDiscountCode(amountOff) {
   const variables = {
     basicCodeDiscount: {
       title: `${numericValue}% Off Points Reward`,
-      code: generatedCode, // Changed from 'codes' array to 'code' string
+      code: generatedCode,
       startsAt: new Date().toISOString(),
+      customerSelection: { // Added required field
+        all: true
+      },
       customerGets: {
         value: {
-          percentage: numericValue
+          percentage: numericValue / 100 // Convert to decimal (10% → 0.10)
         },
-        items: { // Correct field structure
+        items: {
           all: true
         }
       },
@@ -280,7 +283,7 @@ async function createShopifyDiscountCode(amountOff) {
         shippingDiscounts: true
       },
       usageLimit: 1,
-      appliesOncePerCustomer: true // Correct field name
+      appliesOncePerCustomer: true
     }
   };
 
