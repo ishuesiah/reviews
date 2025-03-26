@@ -271,12 +271,41 @@ async function createShopifyDiscountCode(amountOff) {
     const priceRuleData = await priceRuleResponse.json();
     const priceRuleId = priceRuleData.price_rule.id;
 
-    // 2. Create Discount Code (remainder unchanged)
-    // ... rest of the function ...
+        // 2. Create Discount Code under the Price Rule
+    const discountResponse = await fetch(
+      `${adminApiUrl}/price_rules/${priceRuleId}/discount_codes.json`,
+      {
+        method: 'POST',
+        headers: {
+          'X-Shopify-Access-Token': adminApiToken,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          discount_code: {
+            code: discountCode,
+            usage_count: 0
+          }
+        })
+      }
+    );
+
+    if (!discountResponse.ok) {
+      const error = await discountResponse.json();
+      // Clean up price rule if discount creation fails
+      await fetch(`${adminApiUrl}/price_rules/${priceRuleId}.json`, {
+        method: 'DELETE',
+        headers: {
+          'X-Shopify-Access-Token': adminApiToken
+        }
+      });
+      throw new Error(`Discount code creation failed: ${error.errors}`);
+    }
+
+    return discountCode;
 
   } catch (error) {
-    console.error('Discount creation error:', error.message);
-    throw new Error(`Failed to create discount: ${error.message}`);
+    console.error('Discount creation error:', error);
+    throw new Error('Failed to create discount code');
   }
 }
 
@@ -286,4 +315,3 @@ async function createShopifyDiscountCode(amountOff) {
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
   console.log(`Configured for shop: ${SHOP_DOMAIN}`);
-});
