@@ -202,7 +202,7 @@ app.post('/api/referral/redeem', async (req, res) => {
     // 6) Save the generated discount code to the new column in the users table.
     // Ensure that your users table has a column called "discount_code" (adjust column name if different)
     console.log(`DEBUG: Saving discount code ${generatedCode} to user_id=${user.user_id}`);
-    await connection.execute('UPDATE users SET discount_code = ? WHERE user_id = ?', [generatedCode, user.user_id]);
+    await connection.execute('UPDATE users SET last_discount_code = ? WHERE user_id = ?', [generatedCode, user.user_id]);
 
     // 7) Return the new code and updated points balance
     console.log(`DEBUG: Successfully redeemed. Returning code=${generatedCode}, newPoints=${newPoints}`);
