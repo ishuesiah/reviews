@@ -238,7 +238,7 @@ async function createShopifyDiscountCode(amountOff) {
   const discountCode = `POINTS${numericValue}PCT_${Math.random().toString(36).substr(2,5).toUpperCase()}`;
 
   try {
-    // 1. Create Price Rule with percentage settings
+    // 1. Create Price Rule with simplified structure
     const priceRuleResponse = await fetch(`${adminApiUrl}/price_rules.json`, {
       method: 'POST',
       headers: {
@@ -250,18 +250,13 @@ async function createShopifyDiscountCode(amountOff) {
           title: `${numericValue}% Points Reward`,
           target_type: "line_item",
           target_selection: "all",
-          allocation_method: "across", // Shopify requires "across" for percentages
+          allocation_method: "across",
           value_type: "percentage",
-          value: (-numericValue).toString(), // Negative value for percentage discount
+          value: (-numericValue).toString(), // Negative percentage
           customer_selection: "all",
           starts_at: new Date().toISOString(),
           usage_limit: 1,
-          once_per_customer: true,
-          prerequisite_to_entitlement_quantity_ratio: {
-            prerequisite_quantity: 0,
-            entitled_quantity: 1
-          },
-          entitlement_discount_application_strategy: "APPLY_TO_ENTITLED_ITEMS"
+          once_per_customer: true
         }
       })
     });
