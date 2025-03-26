@@ -246,19 +246,23 @@ async function createShopifyDiscountCode(amountOff) {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        price_rule: {
-          title: `${numericValue}% Points Reward`,
-          target_type: "line_item",
-          target_selection: "all",
-          allocation_method: "across",
-          value_type: "percentage",
-          value: (-numericValue).toString(), // Negative percentage
-          customer_selection: "all",
-          starts_at: new Date().toISOString(),
-          usage_limit: 1,
-          once_per_customer: true
+      price_rule: {
+        title: `${numericValue}% Points Reward`,
+        target_type: "line_item",
+        target_selection: "all",
+        allocation_method: "across",
+        value_type: "percentage",
+        value: (-numericValue).toString(),
+        customer_selection: "all",
+        starts_at: new Date().toISOString(),
+        usage_limit: 1,
+        once_per_customer: true,
+        combines_with: {
+          order_discounts: true,
+          product_discounts: true,
+          shipping_discounts: true
         }
-      })
+      }
     });
 
     // Improved error handling
