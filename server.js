@@ -292,10 +292,10 @@ async function createShopifyDiscountCode(amountOff) {
     }
 
     const userErrors = result.data?.discountCodeBasicCreate?.userErrors;
-    if (userErrors?.length > 0) {
-      console.error('Discount Creation Errors:', userErrors);
-      throw new Error(userErrors.map(e => `${e.field}: ${e.message}`).join(', ');
-    }
+  if (userErrors?.length > 0) {
+  console.error('Discount Creation Errors:', userErrors);
+  throw new Error(userErrors.map(e => `${e.field}: ${e.message}`).join(', ')); // Added closing )
+}
 
     return result.data?.discountCodeBasicCreate?.discountCodeBasic?.code || discountCode;
 
