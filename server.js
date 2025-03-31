@@ -49,7 +49,17 @@ pool.on('error', (err) => {
 
 // Enable CORS for your Shopify store domain
 app.use(cors({
-  origin: process.env.SHOPIFY_STORE_URL || 'https://hemlock-oak.myshopify.com',
+  origin: function (origin, callback) {
+    const allowedOrigins = [
+      'https://hemlock-oak.myshopify.com',
+      'https://www.hemlockandoak.com'
+    ];
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   methods: ['GET', 'POST'],
   credentials: true
 }));
@@ -312,7 +322,53 @@ async function createShopifyDiscountCode(amountOff) {
   }
 }
 
-// (Optional) Implement createShopifyGiftCard() similarly if you plan to support gift cards.
+/********************************************************************
+ * POST /api/referral/mark-discount-used
+ * Body: {
+ *   "email": "user@example.com",
+ *   "usedCode": "POINTS10PCT_XYZ12"
+ * }
+ ********************************************************************/
+app.post('/api/referral/mark-discount-used', async (req, res) => {
+  let connection;
+  try {
+    const { email, usedCode } = req.body;
+
+    if (!email || !usedCode) {
+      return res.status(400).json({ error: 'Missing email or usedCode.' });
+    }
+
+    connection = await pool.getConnection();
+    console.log(`DEBUG: Checking user ${email} for code ${usedCode}`);
+
+    // Ensure the code matches the current discount code
+    const [rows] = await connection.execute(
+      'SELECT * FROM users WHERE email = ? AND last_discount_code = ?',
+      [email, usedCode]
+    );
+
+    if (rows.length === 0) {
+      console.log('DEBUG: No matching user/code found');
+      return res.status(404).json({ error: 'User with that code not found or code does not match.' });
+    }
+
+    // Clear the last_discount_code field
+    await connection.execute(
+      'UPDATE users SET last_discount_code = NULL WHERE email = ?',
+      [email]
+    );
+
+    console.log(`DEBUG: Cleared last_discount_code for user ${email}`);
+    res.json({ message: 'Discount code marked as used and removed from user.' });
+
+  } catch (err) {
+    console.error('Error marking discount code used:', err.message);
+    res.status(500).json({ error: 'Internal server error' });
+  } finally {
+    if (connection) connection.release();
+  }
+});
+
 
 // Start the server
 app.listen(port, () => {
