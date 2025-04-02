@@ -389,7 +389,7 @@ app.post('/api/referral/cancel-redeem', async (req, res) => {
     connection = await pool.getConnection();
 
     const [userRows] = await connection.execute(
-      'SELECT * FROM referrals WHERE email = ?', [email]
+      'SELECT * FROM users WHERE email = ?', [email]
     );
 
     if (!userRows || userRows.length === 0) {
@@ -400,7 +400,7 @@ app.post('/api/referral/cancel-redeem', async (req, res) => {
     const newPoints = user.points + parseInt(pointsToRefund, 10);
 
     await connection.execute(
-      'UPDATE referrals SET points = ? WHERE email = ?', [newPoints, email]
+      'UPDATE users SET points = ? WHERE email = ?', [newPoints, email]
     );
 
     return res.json({ message: 'Points refunded.', newPoints });
