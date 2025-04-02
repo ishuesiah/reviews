@@ -307,18 +307,26 @@ async function createShopifyDiscountCode(redeemValue, pointsToRedeem) {
     });
 
     const result = await response.json();
-    const userErrors = result.data?.discountCodeCreate?.userErrors || [];
+    console.log("DEBUG: Shopify GraphQL Response:", JSON.stringify(result, null, 2));
 
-    if (result.errors || userErrors.length > 0) {
+    const userErrors = result.data?.discountCodeCreate?.userErrors || [];
+    const discount = result.data?.discountCodeCreate?.discountCode;
+
+    if (userErrors.length > 0) {
       console.error('Shopify userErrors:', userErrors);
-      throw new Error('Failed to create discount code');
+      throw new Error(userErrors[0].message || 'Shopify user error');
     }
 
-    return result.data.discountCodeCreate.discountCode.code;
+    if (!discount || !discount.code) {
+      throw new Error('Shopify returned no discount code');
+    }
+
+    return discount.code;
   } catch (err) {
     console.error('Discount creation error:', err.message);
     throw new Error('Failed to create discount code');
   }
+
 }
 
 
