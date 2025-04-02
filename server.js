@@ -245,115 +245,56 @@ async function createShopifyDiscountCode(redeemValue, pointsToRedeem) {
   const adminApiUrl = 'https://hemlock-oak.myshopify.com/admin/api/2024-10/graphql.json';
   const adminApiToken = process.env.SHOPIFY_ADMIN_TOKEN;
 
-  let title = '';
-  let code = '';
-  let mutation = '';
-  let variables = {};
+  const isFixed = redeemValue === 'dynamic' || /^\d+CAD$/.test(redeemValue);
+  const amount = isFixed
+    ? (redeemValue === 'dynamic' ? (pointsToRedeem / 100).toFixed(2) : parseInt(redeemValue.replace('CAD', ''), 10))
+    : null;
 
-  const isFixedAmount = redeemValue === 'dynamic' || /^\d+CAD$/.test(redeemValue);
+  const code = isFixed
+    ? `POINTS${amount.replace('.', '')}CAD_${Math.random().toString(36).substr(2, 5).toUpperCase()}`
+    : `POINTS${redeemValue.replace(/\D/g, '')}PCT_${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
 
-  if (isFixedAmount) {
-    // Fixed Amount Discount
-    const amount = redeemValue === 'dynamic'
-      ? (pointsToRedeem / 100).toFixed(2)
-      : parseInt(redeemValue.replace('CAD', ''), 10);
+  const title = isFixed
+    ? `$${amount} Off Reward`
+    : `${redeemValue.replace(/\D/g, '')}% Off Reward`;
 
-    title = `$${amount} Off Reward`;
-    code = `POINTS${amount.replace('.', '')}CAD_${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
-
-    mutation = `
-      mutation discountCodeFixedAmountCreate($discount: DiscountCodeFixedAmountInput!) {
-        discountCodeFixedAmountCreate(discount: $discount) {
-          codeDiscountNode {
-            codeDiscount {
-              ... on DiscountCodeFixedAmount {
-                codes(first: 1) {
-                  nodes {
-                    code
-                  }
-                }
-              }
-            }
-          }
-          userErrors {
-            field
-            message
-          }
+  const mutation = `
+    mutation discountCodeCreate($code: DiscountCodeInput!) {
+      discountCodeCreate(code: $code) {
+        discountCode {
+          code
+        }
+        userErrors {
+          field
+          message
         }
       }
-    `;
+    }
+  `;
 
-    variables = {
-      discount: {
-        title,
-        code,
-        startsAt: new Date().toISOString(),
-        customerSelection: { all: true },
-        customerGets: {
-          value: {
-            amount: parseFloat(amount)
-          },
-          items: { all: true }
-        },
-        combinesWith: {
-          orderDiscounts: true,
-          productDiscounts: true,
-          shippingDiscounts: true
-        },
-        usageLimit: 1,
-        appliesOncePerCustomer: true
-      }
-    };
-  } else {
-    // Percentage Discount Fallback
-    const percentage = parseFloat(redeemValue.replace(/\D/g, '')) || 10;
-    title = `${percentage}% Off Points Reward`;
-    code = `POINTS${percentage}PCT_${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
+  const discountValue = isFixed
+    ? { amount: parseFloat(amount) }
+    : { percentage: parseFloat(redeemValue.replace(/\D/g, '')) };
 
-    mutation = `
-      mutation discountCodeBasicCreate($basicCodeDiscount: DiscountCodeBasicInput!) {
-        discountCodeBasicCreate(basicCodeDiscount: $basicCodeDiscount) {
-          codeDiscountNode {
-            codeDiscount {
-              ... on DiscountCodeBasic {
-                codes(first: 1) {
-                  nodes {
-                    code
-                  }
-                }
-              }
-            }
-          }
-          userErrors {
-            field
-            message
-          }
-        }
+  const variables = {
+    code: {
+      title,
+      code,
+      startsAt: new Date().toISOString(),
+      usageLimit: 1,
+      appliesOncePerCustomer: true,
+      customerSelection: { all: true },
+      combinesWith: {
+        orderDiscounts: true,
+        productDiscounts: true,
+        shippingDiscounts: true
+      },
+      customerGets: {
+        value: discountValue,
+        items: { all: true }
       }
-    `;
-
-    variables = {
-      basicCodeDiscount: {
-        title,
-        code,
-        startsAt: new Date().toISOString(),
-        customerSelection: { all: true },
-        customerGets: {
-          value: {
-            percentage: percentage / 100
-          },
-          items: { all: true }
-        },
-        combinesWith: {
-          orderDiscounts: true,
-          productDiscounts: true,
-          shippingDiscounts: true
-        },
-        usageLimit: 1,
-        appliesOncePerCustomer: true
-      }
-    };
-  }
+    }
+  };
 
   try {
     const response = await fetch(adminApiUrl, {
@@ -366,26 +307,20 @@ async function createShopifyDiscountCode(redeemValue, pointsToRedeem) {
     });
 
     const result = await response.json();
-
-    const userErrors =
-      result.data?.discountCodeFixedAmountCreate?.userErrors ||
-      result.data?.discountCodeBasicCreate?.userErrors || [];
+    const userErrors = result.data?.discountCodeCreate?.userErrors || [];
 
     if (result.errors || userErrors.length > 0) {
-      console.error('Discount creation error:', JSON.stringify(result, null, 2));
+      console.error('Shopify userErrors:', userErrors);
       throw new Error('Failed to create discount code');
     }
 
-    const discountNode =
-      result.data?.discountCodeFixedAmountCreate?.codeDiscountNode ||
-      result.data?.discountCodeBasicCreate?.codeDiscountNode;
-
-    return discountNode.codeDiscount.codes.nodes[0].code;
-  } catch (error) {
-    console.error('Discount creation error:', error.message);
+    return result.data.discountCodeCreate.discountCode.code;
+  } catch (err) {
+    console.error('Discount creation error:', err.message);
     throw new Error('Failed to create discount code');
   }
 }
+
 
 
 /********************************************************************
