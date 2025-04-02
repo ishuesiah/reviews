@@ -384,21 +384,34 @@ app.post('/api/referral/cancel-redeem', async (req, res) => {
     return res.status(400).json({ error: 'Missing email or points to refund.' });
   }
 
+  let connection;
   try {
-    const [user] = await db.query('SELECT * FROM referrals WHERE email = ?', [email]);
-    if (!user || user.length === 0) {
+    connection = await pool.getConnection();
+
+    const [userRows] = await connection.execute(
+      'SELECT * FROM referrals WHERE email = ?', [email]
+    );
+
+    if (!userRows || userRows.length === 0) {
       return res.status(404).json({ error: 'User not found.' });
     }
 
-    const newPoints = user[0].points + parseInt(pointsToRefund, 10);
-    await db.query('UPDATE referrals SET points = ? WHERE email = ?', [newPoints, email]);
+    const user = userRows[0];
+    const newPoints = user.points + parseInt(pointsToRefund, 10);
+
+    await connection.execute(
+      'UPDATE referrals SET points = ? WHERE email = ?', [newPoints, email]
+    );
 
     return res.json({ message: 'Points refunded.', newPoints });
   } catch (err) {
     console.error('Cancel redeem error:', err);
     return res.status(500).json({ error: 'Failed to refund points.' });
+  } finally {
+    if (connection) connection.release();
   }
 });
+
 
 
 // Start the server
