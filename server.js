@@ -247,87 +247,111 @@ async function createShopifyDiscountCode(redeemValue, pointsToRedeem) {
 
   let title = '';
   let code = '';
-  let customerGets = {};
+  let mutation = '';
+  let variables = {};
 
-  if (redeemValue === 'dynamic') {
-    // Dynamic: 100 points = 1 CAD
-    const amount = (pointsToRedeem / 100).toFixed(2);
-    title = `$${amount} Off (Dynamic Reward)`;
+  if (redeemValue === 'dynamic' || /^\d+CAD$/.test(redeemValue)) {
+    // Fixed amount logic
+    const amount = redeemValue === 'dynamic'
+      ? (pointsToRedeem / 100).toFixed(2)
+      : parseInt(redeemValue.replace('CAD', ''), 10);
+
+    title = `$${amount} Off Reward`;
     code = `POINTS${amount.replace('.', '')}CAD_${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
-    customerGets = {
-      value: {
-        fixedAmount: {
-          amount: parseFloat(amount),
-          appliesOnEachItem: false
-        }
-      },
-      items: { all: true }
-    };
-  } else if (/^\d+CAD$/.test(redeemValue)) {
-    // Fixed: e.g., 5CAD, 10CAD
-    const amount = parseInt(redeemValue.replace('CAD', ''), 10);
-    title = `$${amount} Off Coupon`;
-    code = `POINTS${amount}CAD_${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
-    customerGets = {
-      value: {
-        fixedAmount: {
-          amount: amount,
-          appliesOnEachItem: false
-        }
-      },
-      items: { all: true }
-    };
-  } else {
-    // Fallback to percentage (legacy behavior)
-    const percentage = parseFloat(redeemValue.replace(/\D/g, '')) || 10;
-    title = `${percentage}% Off Points Reward`;
-    code = `POINTS${percentage}PCT_${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
-    customerGets = {
-      value: {
-        percentage: percentage / 100
-      },
-      items: { all: true }
-    };
-  }
 
-  const mutation = `
-    mutation discountCodeBasicCreate($basicCodeDiscount: DiscountCodeBasicInput!) {
-      discountCodeBasicCreate(basicCodeDiscount: $basicCodeDiscount) {
-        codeDiscountNode {
-          codeDiscount {
-            ... on DiscountCodeBasic {
-              codes(first: 1) {
-                nodes {
-                  code
+    mutation = `
+      mutation discountCodeAmountCreate($discount: DiscountCodeAmountInput!) {
+        discountCodeAmountCreate(discount: $discount) {
+          codeDiscountNode {
+            codeDiscount {
+              ... on DiscountCodeAmount {
+                codes(first: 1) {
+                  nodes {
+                    code
+                  }
                 }
               }
             }
           }
-        }
-        userErrors {
-          field
-          message
+          userErrors {
+            field
+            message
+          }
         }
       }
-    }
-  `;
+    `;
 
-  const variables = {
-    basicCodeDiscount: {
-      title,
-      code,
-      startsAt: new Date().toISOString(),
-      customerSelection: { all: true },
-      customerGets,
-      combinesWith: {
-        orderDiscounts: true,
-        productDiscounts: true,
-        shippingDiscounts: true
-      },
-      usageLimit: 1,
-      appliesOncePerCustomer: true
-    }
-  };
+    variables = {
+      discount: {
+        title,
+        code,
+        startsAt: new Date().toISOString(),
+        customerSelection: { all: true },
+        customerGets: {
+          value: {
+            amount: parseFloat(amount)
+          },
+          items: { all: true }
+        },
+        combinesWith: {
+          orderDiscounts: true,
+          productDiscounts: true,
+          shippingDiscounts: true
+        },
+        usageLimit: 1,
+        appliesOncePerCustomer: true
+      }
+    };
+  } else {
+    // Fallback to percentage
+    const percentage = parseFloat(redeemValue.replace(/\D/g, '')) || 10;
+    title = `${percentage}% Off Points Reward`;
+    code = `POINTS${percentage}PCT_${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
+
+    mutation = `
+      mutation discountCodeBasicCreate($basicCodeDiscount: DiscountCodeBasicInput!) {
+        discountCodeBasicCreate(basicCodeDiscount: $basicCodeDiscount) {
+          codeDiscountNode {
+            codeDiscount {
+              ... on DiscountCodeBasic {
+                codes(first: 1) {
+                  nodes {
+                    code
+                  }
+                }
+              }
+            }
+          }
+          userErrors {
+            field
+            message
+          }
+        }
+      }
+    `;
+
+    variables = {
+      basicCodeDiscount: {
+        title,
+        code,
+        startsAt: new Date().toISOString(),
+        customerSelection: { all: true },
+        customerGets: {
+          value: {
+            percentage: percentage / 100
+          },
+          items: { all: true }
+        },
+        combinesWith: {
+          orderDiscounts: true,
+          productDiscounts: true,
+          shippingDiscounts: true
+        },
+        usageLimit: 1,
+        appliesOncePerCustomer: true
+      }
+    };
+  }
 
   try {
     const response = await fetch(adminApiUrl, {
@@ -340,17 +364,23 @@ async function createShopifyDiscountCode(redeemValue, pointsToRedeem) {
     });
 
     const result = await response.json();
-    if (result.errors || result.data?.discountCodeBasicCreate?.userErrors?.length > 0) {
+
+    const userErrors = result.data?.discountCodeAmountCreate?.userErrors || result.data?.discountCodeBasicCreate?.userErrors || [];
+    if (result.errors || userErrors.length > 0) {
       console.error('Discount creation error:', JSON.stringify(result, null, 2));
       throw new Error('Failed to create discount code');
     }
 
-    return result.data.discountCodeBasicCreate.codeDiscountNode.codeDiscount.codes.nodes[0].code;
+    const discountNode = result.data?.discountCodeAmountCreate?.codeDiscountNode
+                      || result.data?.discountCodeBasicCreate?.codeDiscountNode;
+
+    return discountNode.codeDiscount.codes.nodes[0].code;
   } catch (error) {
     console.error('Discount creation error:', error.message);
     throw new Error('Failed to create discount code');
   }
 }
+
 
 /********************************************************************
  * POST /api/referral/mark-discount-used
