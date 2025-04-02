@@ -259,10 +259,18 @@ async function createShopifyDiscountCode(redeemValue, pointsToRedeem) {
     : `${redeemValue.replace(/\D/g, '')}% Off Reward`;
 
   const mutation = `
-    mutation discountCodeCreate($code: DiscountCodeInput!) {
-      discountCodeCreate(code: $code) {
-        discountCode {
-          code
+    mutation discountCodeNodeCreate($discountCode: DiscountCodeInput!) {
+      discountCodeNodeCreate(discountCode: $discountCode) {
+        discountCodeNode {
+          codeDiscount {
+            ... on DiscountCode {
+              codes(first: 1) {
+                nodes {
+                  code
+                }
+              }
+            }
+          }
         }
         userErrors {
           field
@@ -277,7 +285,7 @@ async function createShopifyDiscountCode(redeemValue, pointsToRedeem) {
     : { percentage: parseFloat(redeemValue.replace(/\D/g, '')) };
 
   const variables = {
-    code: {
+    discountCode: {
       title,
       code,
       startsAt: new Date().toISOString(),
@@ -309,27 +317,22 @@ async function createShopifyDiscountCode(redeemValue, pointsToRedeem) {
     const result = await response.json();
     console.log("DEBUG: Shopify GraphQL Response:", JSON.stringify(result, null, 2));
 
-    const userErrors = result.data?.discountCodeCreate?.userErrors || [];
-    const discount = result.data?.discountCodeCreate?.discountCode;
+    const userErrors = result.data?.discountCodeNodeCreate?.userErrors || [];
 
     if (userErrors.length > 0) {
       console.error('Shopify userErrors:', userErrors);
       throw new Error(userErrors[0].message || 'Shopify user error');
     }
 
-    if (!discount || !discount.code) {
-      throw new Error('Shopify returned no discount code');
-    }
+    const codeNode = result.data?.discountCodeNodeCreate?.discountCodeNode?.codeDiscount?.codes?.nodes?.[0]?.code;
+    if (!codeNode) throw new Error('Shopify returned no discount code');
 
-    return discount.code;
+    return codeNode;
   } catch (err) {
     console.error('Discount creation error:', err.message);
     throw new Error('Failed to create discount code');
   }
-
 }
-
-
 
 /********************************************************************
  * POST /api/referral/mark-discount-used
