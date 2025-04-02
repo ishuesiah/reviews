@@ -199,13 +199,15 @@ app.post('/api/referral/redeem', async (req, res) => {
     let generatedCode = '';
     if (redeemType === 'discount') {
       console.log(`DEBUG: Creating discount code for redeemValue=${redeemValue}`);
-      generatedCode = await createShopifyDiscountCode(redeemValue);
+      generatedCode = await createShopifyDiscountCode(redeemValue, pointsToRedeem);
+
     } else if (redeemType === 'gift_card') {
       console.log(`DEBUG: Creating gift card for redeemValue=${redeemValue}`);
       generatedCode = await createShopifyGiftCard(redeemValue); // Implement if needed.
     } else {
       console.log(`DEBUG: Unrecognized redeemType, defaulting to discount code for redeemValue=${redeemValue}`);
-      generatedCode = await createShopifyDiscountCode(redeemValue);
+      generatedCode = await createShopifyDiscountCode(redeemValue, pointsToRedeem);
+
     }
     console.log(`DEBUG: Discount code generated: ${generatedCode}`);
 
@@ -239,22 +241,61 @@ app.post('/api/referral/redeem', async (req, res) => {
 /********************************************************************
  * Helper function to create a discount code via Shopify Admin API
  ********************************************************************/
-async function createShopifyDiscountCode(amountOff) {
+async function createShopifyDiscountCode(redeemValue, pointsToRedeem) {
   const adminApiUrl = 'https://hemlock-oak.myshopify.com/admin/api/2024-10/graphql.json';
   const adminApiToken = process.env.SHOPIFY_ADMIN_TOKEN;
 
-  const numericValue = parseFloat(amountOff.replace(/\D/g, '')) || 10;
-  const generatedCode = `POINTS${numericValue}PCT_${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
+  let title = '';
+  let code = '';
+  let customerGets = {};
+
+  if (redeemValue === 'dynamic') {
+    // Dynamic: 100 points = 1 CAD
+    const amount = (pointsToRedeem / 100).toFixed(2);
+    title = `$${amount} Off (Dynamic Reward)`;
+    code = `POINTS${amount.replace('.', '')}CAD_${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
+    customerGets = {
+      value: {
+        fixedAmount: {
+          amount: parseFloat(amount),
+          appliesOnEachItem: false
+        }
+      },
+      items: { all: true }
+    };
+  } else if (/^\d+CAD$/.test(redeemValue)) {
+    // Fixed: e.g., 5CAD, 10CAD
+    const amount = parseInt(redeemValue.replace('CAD', ''), 10);
+    title = `$${amount} Off Coupon`;
+    code = `POINTS${amount}CAD_${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
+    customerGets = {
+      value: {
+        fixedAmount: {
+          amount: amount,
+          appliesOnEachItem: false
+        }
+      },
+      items: { all: true }
+    };
+  } else {
+    // Fallback to percentage (legacy behavior)
+    const percentage = parseFloat(redeemValue.replace(/\D/g, '')) || 10;
+    title = `${percentage}% Off Points Reward`;
+    code = `POINTS${percentage}PCT_${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
+    customerGets = {
+      value: {
+        percentage: percentage / 100
+      },
+      items: { all: true }
+    };
+  }
 
   const mutation = `
     mutation discountCodeBasicCreate($basicCodeDiscount: DiscountCodeBasicInput!) {
       discountCodeBasicCreate(basicCodeDiscount: $basicCodeDiscount) {
         codeDiscountNode {
-          id
           codeDiscount {
-            __typename
             ... on DiscountCodeBasic {
-              title
               codes(first: 1) {
                 nodes {
                   code
@@ -273,20 +314,11 @@ async function createShopifyDiscountCode(amountOff) {
 
   const variables = {
     basicCodeDiscount: {
-      title: `${numericValue}% Off Points Reward`,
-      code: generatedCode,
+      title,
+      code,
       startsAt: new Date().toISOString(),
-      customerSelection: { // Added required field
-        all: true
-      },
-      customerGets: {
-        value: {
-          percentage: numericValue / 100 // Convert to decimal (10% → 0.10)
-        },
-        items: {
-          all: true
-        }
-      },
+      customerSelection: { all: true },
+      customerGets,
       combinesWith: {
         orderDiscounts: true,
         productDiscounts: true,
@@ -308,14 +340,12 @@ async function createShopifyDiscountCode(amountOff) {
     });
 
     const result = await response.json();
-
     if (result.errors || result.data?.discountCodeBasicCreate?.userErrors?.length > 0) {
       console.error('Discount creation error:', JSON.stringify(result, null, 2));
       throw new Error('Failed to create discount code');
     }
 
     return result.data.discountCodeBasicCreate.codeDiscountNode.codeDiscount.codes.nodes[0].code;
-    
   } catch (error) {
     console.error('Discount creation error:', error.message);
     throw new Error('Failed to create discount code');
