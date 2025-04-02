@@ -242,7 +242,7 @@ app.post('/api/referral/redeem', async (req, res) => {
  * Helper function to create a discount code via Shopify Admin API
  ********************************************************************/
 async function createShopifyDiscountCode(amountOff, pointsToRedeem) {
-  const adminApiUrl = 'https://hemlock-oak.myshopify.com/admin/api/2024-10/graphql.json';
+  const adminApiUrl = 'https://hemlock-oak.myshopify.com/admin/api/2025-04/graphql.json';
   const adminApiToken = process.env.SHOPIFY_ADMIN_TOKEN;
 
   const numericValue = amountOff === 'dynamic'
@@ -286,7 +286,7 @@ async function createShopifyDiscountCode(amountOff, pointsToRedeem) {
       },
       customerGets: {
         value: {
-          fixedAmount: {
+          discountAmount: {
             amount: numericValue,
             appliesOnEachItem: false
           }
@@ -329,7 +329,6 @@ async function createShopifyDiscountCode(amountOff, pointsToRedeem) {
     throw new Error('Failed to create discount code');
   }
 }
-
 
 /********************************************************************
  * POST /api/referral/mark-discount-used
