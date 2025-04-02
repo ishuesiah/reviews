@@ -377,6 +377,29 @@ app.post('/api/referral/mark-discount-used', async (req, res) => {
   }
 });
 
+app.post('/api/referral/cancel-redeem', async (req, res) => {
+  const { email, pointsToRefund } = req.body;
+
+  if (!email || !pointsToRefund) {
+    return res.status(400).json({ error: 'Missing email or points to refund.' });
+  }
+
+  try {
+    const [user] = await db.query('SELECT * FROM referrals WHERE email = ?', [email]);
+    if (!user || user.length === 0) {
+      return res.status(404).json({ error: 'User not found.' });
+    }
+
+    const newPoints = user[0].points + parseInt(pointsToRefund, 10);
+    await db.query('UPDATE referrals SET points = ? WHERE email = ?', [newPoints, email]);
+
+    return res.json({ message: 'Points refunded.', newPoints });
+  } catch (err) {
+    console.error('Cancel redeem error:', err);
+    return res.status(500).json({ error: 'Failed to refund points.' });
+  }
+});
+
 
 // Start the server
 app.listen(port, () => {
