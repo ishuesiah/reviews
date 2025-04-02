@@ -250,8 +250,10 @@ async function createShopifyDiscountCode(redeemValue, pointsToRedeem) {
   let mutation = '';
   let variables = {};
 
-  if (redeemValue === 'dynamic' || /^\d+CAD$/.test(redeemValue)) {
-    // Fixed amount logic
+  const isFixedAmount = redeemValue === 'dynamic' || /^\d+CAD$/.test(redeemValue);
+
+  if (isFixedAmount) {
+    // Fixed Amount Discount
     const amount = redeemValue === 'dynamic'
       ? (pointsToRedeem / 100).toFixed(2)
       : parseInt(redeemValue.replace('CAD', ''), 10);
@@ -260,11 +262,11 @@ async function createShopifyDiscountCode(redeemValue, pointsToRedeem) {
     code = `POINTS${amount.replace('.', '')}CAD_${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
 
     mutation = `
-      mutation discountCodeAmountCreate($discount: DiscountCodeAmountInput!) {
-        discountCodeAmountCreate(discount: $discount) {
+      mutation discountCodeFixedAmountCreate($discount: DiscountCodeFixedAmountInput!) {
+        discountCodeFixedAmountCreate(discount: $discount) {
           codeDiscountNode {
             codeDiscount {
-              ... on DiscountCodeAmount {
+              ... on DiscountCodeFixedAmount {
                 codes(first: 1) {
                   nodes {
                     code
@@ -303,7 +305,7 @@ async function createShopifyDiscountCode(redeemValue, pointsToRedeem) {
       }
     };
   } else {
-    // Fallback to percentage
+    // Percentage Discount Fallback
     const percentage = parseFloat(redeemValue.replace(/\D/g, '')) || 10;
     title = `${percentage}% Off Points Reward`;
     code = `POINTS${percentage}PCT_${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
@@ -365,14 +367,18 @@ async function createShopifyDiscountCode(redeemValue, pointsToRedeem) {
 
     const result = await response.json();
 
-    const userErrors = result.data?.discountCodeAmountCreate?.userErrors || result.data?.discountCodeBasicCreate?.userErrors || [];
+    const userErrors =
+      result.data?.discountCodeFixedAmountCreate?.userErrors ||
+      result.data?.discountCodeBasicCreate?.userErrors || [];
+
     if (result.errors || userErrors.length > 0) {
       console.error('Discount creation error:', JSON.stringify(result, null, 2));
       throw new Error('Failed to create discount code');
     }
 
-    const discountNode = result.data?.discountCodeAmountCreate?.codeDiscountNode
-                      || result.data?.discountCodeBasicCreate?.codeDiscountNode;
+    const discountNode =
+      result.data?.discountCodeFixedAmountCreate?.codeDiscountNode ||
+      result.data?.discountCodeBasicCreate?.codeDiscountNode;
 
     return discountNode.codeDiscount.codes.nodes[0].code;
   } catch (error) {
