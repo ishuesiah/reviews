@@ -318,10 +318,15 @@ async function createShopifyDiscountCode(amountOff, pointsToRedeem) {
     throw new Error('Failed to create discount code');
   }
 
-  return {
-    code: result.data.discountCodeBasicCreate.codeDiscountNode.codeDiscount.codes.nodes[0].code,
-    discountId: result.data.discountCodeBasicCreate.codeDiscountNode.id
-  };
+ const discountBasic = result.data.discountCodeBasicCreate.codeDiscountNode.codeDiscount;
+const discountBasicId = result.data.discountCodeBasicCreate.codeDiscountNode.id;
+
+// Return the basic code and the correct ID
+return {
+  code: discountBasic.codes.nodes[0].code,
+  discountId: discountBasicId.replace('DiscountCodeNode', 'DiscountCodeBasic')
+};
+
 }
 
 /********************************************************************
