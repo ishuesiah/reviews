@@ -350,6 +350,12 @@ async function deleteShopifyDiscount(discountId) {
     }
   `;
 
+  console.log('🧪 DELETE DISCOUNT: Sending GID', discountId);
+
+const result = await response.json();
+console.log('🧪 Shopify Response:', JSON.stringify(result, null, 2));
+
+
   const response = await fetch(adminApiUrl, {
     method: 'POST',
     headers: {
