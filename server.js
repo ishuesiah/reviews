@@ -338,6 +338,16 @@ async function deleteShopifyDiscount(discountId) {
   const adminApiUrl = 'https://hemlock-oak.myshopify.com/admin/api/2025-04/graphql.json';
   const adminApiToken = process.env.SHOPIFY_ADMIN_TOKEN;
 
+  if (!discountId || !discountId.startsWith('gid://shopify/DiscountCodeBasic/')) {
+    console.error('❌ Invalid or missing discountId:', discountId);
+    throw new Error('Invalid discount code ID format.');
+  }
+
+  if (!adminApiToken) {
+    console.error('❌ Missing Shopify Admin API token.');
+    throw new Error('Shopify Admin API token not configured.');
+  }
+
   const mutation = `
     mutation discountCodeBasicDelete($id: ID!) {
       discountCodeBasicDelete(id: $id) {
@@ -350,33 +360,46 @@ async function deleteShopifyDiscount(discountId) {
     }
   `;
 
-  console.log('🧪 DELETE DISCOUNT: Sending GID', discountId);
+  const variables = { id: discountId };
 
-const result = await response.json();
-console.log('🧪 Shopify Response:', JSON.stringify(result, null, 2));
+  try {
+    console.log('🧪 Attempting to delete Shopify discount:', discountId);
 
+    const response = await fetch(adminApiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Shopify-Access-Token': adminApiToken
+      },
+      body: JSON.stringify({ query: mutation, variables })
+    });
 
-  const response = await fetch(adminApiUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Shopify-Access-Token': adminApiToken
-    },
-    body: JSON.stringify({
-      query: mutation,
-      variables: { id: discountId }
-    })
-  });
+    const result = await response.json();
 
-  const result = await response.json();
+    console.log('🧪 Shopify Response:', JSON.stringify(result, null, 2));
 
-  if (result.errors || result.data?.discountCodeBasicDelete?.userErrors?.length > 0) {
-    console.error('Delete discount error:', JSON.stringify(result, null, 2));
-    throw new Error('Failed to delete discount code');
+    const errors = result.errors || result.data?.discountCodeBasicDelete?.userErrors;
+
+    if (errors && errors.length > 0) {
+      console.error('❌ Shopify deletion failed with errors:', errors);
+      throw new Error('Failed to delete discount: ' + (errors[0].message || 'Unknown error'));
+    }
+
+    const deletedId = result.data?.discountCodeBasicDelete?.deletedDiscountId;
+
+    if (!deletedId) {
+      throw new Error('Shopify deletion returned no ID.');
+    }
+
+    console.log('✅ Successfully deleted discount:', deletedId);
+    return deletedId;
+
+  } catch (error) {
+    console.error('❌ Error during discount deletion:', error.message);
+    throw error;
   }
-
-  return result.data.discountCodeBasicDelete.deletedDiscountId;
 }
+
 
 
 /********************************************************************
