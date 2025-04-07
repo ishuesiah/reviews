@@ -334,24 +334,16 @@ Delete shopify discount
  ********************************************************************/
 
 
-async function deleteShopifyDiscount(discountId) {
+async function deactivateShopifyDiscount(discountId) {
   const adminApiUrl = 'https://hemlock-oak.myshopify.com/admin/api/2025-04/graphql.json';
   const adminApiToken = process.env.SHOPIFY_ADMIN_TOKEN;
 
-  if (!discountId || !discountId.startsWith('gid://shopify/DiscountCodeBasic/')) {
-    console.error('❌ Invalid or missing discountId:', discountId);
-    throw new Error('Invalid discount code ID format.');
-  }
-
-  if (!adminApiToken) {
-    console.error('❌ Missing Shopify Admin API token.');
-    throw new Error('Shopify Admin API token not configured.');
-  }
-
   const mutation = `
-    mutation discountCodeBasicDelete($id: ID!) {
-      discountCodeBasicDelete(id: $id) {
-        deletedDiscountId
+    mutation discountCodeBasicUpdate($id: ID!, $basicCodeDiscount: DiscountCodeBasicInput!) {
+      discountCodeBasicUpdate(id: $id, basicCodeDiscount: $basicCodeDiscount) {
+        codeDiscountNode {
+          id
+        }
         userErrors {
           field
           message
@@ -360,11 +352,14 @@ async function deleteShopifyDiscount(discountId) {
     }
   `;
 
-  const variables = { id: discountId };
+  const variables = {
+    id: discountId,
+    basicCodeDiscount: {
+      endsAt: new Date(Date.now() - 60 * 1000).toISOString()
+    }
+  };
 
   try {
-    console.log('🧪 Attempting to delete Shopify discount:', discountId);
-
     const response = await fetch(adminApiUrl, {
       method: 'POST',
       headers: {
@@ -375,30 +370,24 @@ async function deleteShopifyDiscount(discountId) {
     });
 
     const result = await response.json();
+    console.log('🧪 Deactivate mutation result:', JSON.stringify(result, null, 2));
 
-    console.log('🧪 Shopify Response:', JSON.stringify(result, null, 2));
+    const userErrors = result.data?.discountCodeBasicUpdate?.userErrors || [];
 
-    const errors = result.errors || result.data?.discountCodeBasicDelete?.userErrors;
-
-    if (errors && errors.length > 0) {
-      console.error('❌ Shopify deletion failed with errors:', errors);
-      throw new Error('Failed to delete discount: ' + (errors[0].message || 'Unknown error'));
+    if (userErrors.length > 0) {
+      throw new Error(userErrors[0].message || 'Failed to deactivate discount');
     }
 
-    const deletedId = result.data?.discountCodeBasicDelete?.deletedDiscountId;
+    console.log('✅ Successfully deactivated discount code');
+    return true;
 
-    if (!deletedId) {
-      throw new Error('Shopify deletion returned no ID.');
-    }
-
-    console.log('✅ Successfully deleted discount:', deletedId);
-    return deletedId;
-
-  } catch (error) {
-    console.error('❌ Error during discount deletion:', error.message);
-    throw error;
+  } catch (err) {
+    console.error('❌ Error deactivating discount:', err.message);
+    throw err;
   }
-}
+};
+
+
 
 
 
@@ -474,7 +463,8 @@ app.post('/api/referral/cancel-redeem', async (req, res) => {
     // Attempt to delete the discount from Shopify if an ID exists
     if (user.discount_code_id) {
       try {
-        await deleteShopifyDiscount(user.discount_code_id);
+        await deactivateShopifyDiscount(user.discount_code_id);
+
         console.log(`Deleted discount from Shopify: ${user.discount_code_id}`);
       } catch (err) {
         console.error('Failed to delete discount from Shopify:', err.message);
