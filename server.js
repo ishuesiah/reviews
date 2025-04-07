@@ -197,24 +197,28 @@ app.post('/api/referral/redeem', async (req, res) => {
 
     // 5) Create a discount code (or gift card) via Shopify Admin API
     let generatedCode = '';
+    let discountId = '';
+    
     if (redeemType === 'discount') {
       console.log(`DEBUG: Creating discount code for redeemValue=${redeemValue}`);
-      generatedCode = await createShopifyDiscountCode(redeemValue, pointsToRedeem);
-
+      const result = await createShopifyDiscountCode(redeemValue, pointsToRedeem);
+      generatedCode = result.code;
+      discountId = result.discountId;
     } else if (redeemType === 'gift_card') {
-      console.log(`DEBUG: Creating gift card for redeemValue=${redeemValue}`);
-      generatedCode = await createShopifyGiftCard(redeemValue); // Implement if needed.
+      // If you implement gift cards later
+      generatedCode = await createShopifyGiftCard(redeemValue);
     } else {
-      console.log(`DEBUG: Unrecognized redeemType, defaulting to discount code for redeemValue=${redeemValue}`);
-      generatedCode = await createShopifyDiscountCode(redeemValue, pointsToRedeem);
-
+      const result = await createShopifyDiscountCode(redeemValue, pointsToRedeem);
+      generatedCode = result.code;
+      discountId = result.discountId;
     }
-    console.log(`DEBUG: Discount code generated: ${generatedCode}`);
+    
+    // 6) Save the generated discount code and ID to the database
+    await connection.execute(
+      'UPDATE users SET last_discount_code = ?, discount_code_id = ?, points = ? WHERE user_id = ?',
+      [generatedCode, discountId, newPoints, user.user_id]
+    );
 
-    // 6) Save the generated discount code to the new column in the users table.
-    // Ensure that your users table has a column called "discount_code" (adjust column name if different)
-    console.log(`DEBUG: Saving discount code ${generatedCode} to user_id=${user.user_id}`);
-    await connection.execute('UPDATE users SET last_discount_code = ? WHERE user_id = ?', [generatedCode, user.user_id]);
 
     // 7) Return the new code and updated points balance
     console.log(`DEBUG: Successfully redeemed. Returning code=${generatedCode}, newPoints=${newPoints}`);
@@ -257,9 +261,7 @@ async function createShopifyDiscountCode(amountOff, pointsToRedeem) {
         codeDiscountNode {
           id
           codeDiscount {
-            __typename
             ... on DiscountCodeBasic {
-              title
               codes(first: 1) {
                 nodes {
                   code
@@ -281,9 +283,7 @@ async function createShopifyDiscountCode(amountOff, pointsToRedeem) {
       title: `$${numericValue} Off Points Reward`,
       code: generatedCode,
       startsAt: new Date().toISOString(),
-      customerSelection: {
-        all: true
-      },
+      customerSelection: { all: true },
       customerGets: {
         value: {
           discountAmount: {
@@ -291,9 +291,7 @@ async function createShopifyDiscountCode(amountOff, pointsToRedeem) {
             appliesOnEachItem: false
           }
         },
-        items: {
-          all: true
-        }
+        items: { all: true }
       },
       combinesWith: {
         orderDiscounts: true,
@@ -305,30 +303,70 @@ async function createShopifyDiscountCode(amountOff, pointsToRedeem) {
     }
   };
 
-  try {
-    const response = await fetch(adminApiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Shopify-Access-Token': adminApiToken
-      },
-      body: JSON.stringify({ query: mutation, variables })
-    });
+  const response = await fetch(adminApiUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Shopify-Access-Token': adminApiToken
+    },
+    body: JSON.stringify({ query: mutation, variables })
+  });
 
-    const result = await response.json();
-
-    if (result.errors || result.data?.discountCodeBasicCreate?.userErrors?.length > 0) {
-      console.error('Discount creation error:', JSON.stringify(result, null, 2));
-      throw new Error('Failed to create discount code');
-    }
-
-    return result.data.discountCodeBasicCreate.codeDiscountNode.codeDiscount.codes.nodes[0].code;
-
-  } catch (error) {
-    console.error('Discount creation error:', error.message);
+  const result = await response.json();
+  if (result.errors || result.data?.discountCodeBasicCreate?.userErrors?.length > 0) {
+    console.error('Discount creation error:', JSON.stringify(result, null, 2));
     throw new Error('Failed to create discount code');
   }
+
+  return {
+    code: result.data.discountCodeBasicCreate.codeDiscountNode.codeDiscount.codes.nodes[0].code,
+    discountId: result.data.discountCodeBasicCreate.codeDiscountNode.id
+  };
 }
+
+/********************************************************************
+Delete shopify discount
+ ********************************************************************/
+
+
+async function deleteShopifyDiscount(discountId) {
+  const adminApiUrl = 'https://hemlock-oak.myshopify.com/admin/api/2025-04/graphql.json';
+  const adminApiToken = process.env.SHOPIFY_ADMIN_TOKEN;
+
+  const mutation = `
+    mutation discountCodeBasicDelete($id: ID!) {
+      discountCodeBasicDelete(id: $id) {
+        deletedDiscountId
+        userErrors {
+          field
+          message
+        }
+      }
+    }
+  `;
+
+  const response = await fetch(adminApiUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Shopify-Access-Token': adminApiToken
+    },
+    body: JSON.stringify({
+      query: mutation,
+      variables: { id: discountId }
+    })
+  });
+
+  const result = await response.json();
+
+  if (result.errors || result.data?.discountCodeBasicDelete?.userErrors?.length > 0) {
+    console.error('Delete discount error:', JSON.stringify(result, null, 2));
+    throw new Error('Failed to delete discount code');
+  }
+
+  return result.data.discountCodeBasicDelete.deletedDiscountId;
+}
+
 
 /********************************************************************
  * POST /api/referral/mark-discount-used
@@ -399,11 +437,24 @@ app.post('/api/referral/cancel-redeem', async (req, res) => {
     const user = userRows[0];
     const newPoints = user.points + parseInt(pointsToRefund, 10);
 
+    // Attempt to delete the discount from Shopify if an ID exists
+    if (user.discount_code_id) {
+      try {
+        await deleteShopifyDiscount(user.discount_code_id);
+        console.log(`Deleted discount from Shopify: ${user.discount_code_id}`);
+      } catch (err) {
+        console.error('Failed to delete discount from Shopify:', err.message);
+      }
+    }
+
+    // Refund points and clear both code fields
     await connection.execute(
-      'UPDATE users SET points = ? WHERE email = ?', [newPoints, email]
+      'UPDATE users SET points = ?, last_discount_code = NULL, discount_code_id = NULL WHERE email = ?',
+      [newPoints, email]
     );
 
     return res.json({ message: 'Points refunded.', newPoints });
+
   } catch (err) {
     console.error('Cancel redeem error:', err);
     return res.status(500).json({ error: 'Failed to refund points.' });
