@@ -338,6 +338,42 @@ async function deactivateShopifyDiscount(discountId) {
   const adminApiUrl = 'https://hemlock-oak.myshopify.com/admin/api/2025-04/graphql.json';
   const adminApiToken = process.env.SHOPIFY_ADMIN_TOKEN;
 
+  // Step 1: Query existing discount to get startsAt
+  const query = `
+    query getDiscount($id: ID!) {
+      codeDiscountNode(id: $id) {
+        codeDiscount {
+          ... on DiscountCodeBasic {
+            startsAt
+          }
+        }
+      }
+    }
+  `;
+
+  const queryResponse = await fetch(adminApiUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Shopify-Access-Token': adminApiToken
+    },
+    body: JSON.stringify({
+      query,
+      variables: { id: discountId }
+    })
+  });
+
+  const queryResult = await queryResponse.json();
+  const startsAt = queryResult.data?.codeDiscountNode?.codeDiscount?.startsAt;
+
+  if (!startsAt) {
+    throw new Error('Could not retrieve startsAt for discount');
+  }
+
+  // Step 2: Set endsAt to +1 minute after startsAt
+  const endsAt = new Date(new Date(startsAt).getTime() + 60 * 1000).toISOString();
+
+  // Step 3: Run update mutation to set endsAt
   const mutation = `
     mutation discountCodeBasicUpdate($id: ID!, $basicCodeDiscount: DiscountCodeBasicInput!) {
       discountCodeBasicUpdate(id: $id, basicCodeDiscount: $basicCodeDiscount) {
@@ -355,37 +391,33 @@ async function deactivateShopifyDiscount(discountId) {
   const variables = {
     id: discountId,
     basicCodeDiscount: {
-      endsAt: new Date(Date.now() - 60 * 1000).toISOString()
+      endsAt: endsAt
     }
   };
 
-  try {
-    const response = await fetch(adminApiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Shopify-Access-Token': adminApiToken
-      },
-      body: JSON.stringify({ query: mutation, variables })
-    });
+  const response = await fetch(adminApiUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Shopify-Access-Token': adminApiToken
+    },
+    body: JSON.stringify({ query: mutation, variables })
+  });
 
-    const result = await response.json();
-    console.log('🧪 Deactivate mutation result:', JSON.stringify(result, null, 2));
+  const result = await response.json();
+  console.log('🧪 Deactivate mutation result:', JSON.stringify(result, null, 2));
 
-    const userErrors = result.data?.discountCodeBasicUpdate?.userErrors || [];
+  const userErrors = result.data?.discountCodeBasicUpdate?.userErrors || [];
 
-    if (userErrors.length > 0) {
-      throw new Error(userErrors[0].message || 'Failed to deactivate discount');
-    }
-
-    console.log('✅ Successfully deactivated discount code');
-    return true;
-
-  } catch (err) {
-    console.error('❌ Error deactivating discount:', err.message);
-    throw err;
+  if (userErrors.length > 0) {
+    throw new Error(userErrors[0].message || 'Failed to deactivate discount');
   }
-};
+
+  console.log('✅ Successfully deactivated discount code');
+  return true;
+}
+
+
 
 
 
