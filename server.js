@@ -273,7 +273,7 @@ async function createShopifyDiscountCode(amountOff, pointsToRedeem, options = {}
           value: { percentage: 1.0 },
           items: {
             collections: {
-              products: [options.collectionId]
+              add: [options.collectionId] // ✅ Correct collection format
             }
           }
         },
@@ -368,6 +368,7 @@ async function createShopifyDiscountCode(amountOff, pointsToRedeem, options = {}
     discountId: discountBasicId.replace('DiscountCodeNode', 'DiscountCodeBasic')
   };
 }
+
 
 
 
