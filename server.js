@@ -422,18 +422,20 @@ const query = `
 
   // Step 3: Run update mutation to set endsAt
   const mutation = 
-    mutation discountCodeBasicUpdate($id: ID!, $basicCodeDiscount: DiscountCodeBasicInput!) {
-      discountCodeBasicUpdate(id: $id, basicCodeDiscount: $basicCodeDiscount) {
-        codeDiscountNode {
-          id
-        }
-        userErrors {
-          field
-          message
-        }
+    const mutation = `
+  mutation discountCodeBasicUpdate($id: ID!, $basicCodeDiscount: DiscountCodeBasicInput!) {
+    discountCodeBasicUpdate(id: $id, basicCodeDiscount: $basicCodeDiscount) {
+      codeDiscountNode {
+        id
+      }
+      userErrors {
+        field
+        message
       }
     }
-  ;
+  }
+`;
+
 
   const variables = {
     id: discountId,
@@ -544,7 +546,7 @@ app.post('/api/referral/cancel-redeem', async (req, res) => {
       try {
         await deactivateShopifyDiscount(user.discount_code_id);
 
-        console.log(Deleted discount from Shopify: ${user.discount_code_id});
+        console.log(`Deleted discount from Shopify: ${user.discount_code_id}`);
       } catch (err) {
         console.error('Failed to delete discount from Shopify:', err.message);
       }
