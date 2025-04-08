@@ -256,28 +256,22 @@ async function createShopifyDiscountCode(amountOff, pointsToRedeem, options = {}
   let title = '';
 
   if (rewardType === 'free_product') {
-    // ✅ Support for either productId or productVariantId
-    if (!options.productId && !options.productVariantId) {
-      throw new Error('Missing productId or productVariantId for free product reward');
-    }
-
+    // Dynamic code generation
     generatedCode = `MILESTONEFREE_${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
     title = `Free Product Reward (${generatedCode})`;
 
-    // Construct items block depending on which ID is present
-    let items = {};
-    if (options.productId) {
-      items = {
-        products: {
-          productsToAdd: [options.productId]
-        }
-      };
-    } else {
-      items = {
-        products: {
+    const productInput = options.productVariantId
+      ? {
           productVariantsToAdd: [options.productVariantId]
         }
-      };
+      : options.productId
+        ? {
+            productsToAdd: [options.productId]
+          }
+        : null;
+
+    if (!productInput) {
+      throw new Error('Must provide either productVariantId or productId for free product reward.');
     }
 
     variables = {
@@ -290,7 +284,9 @@ async function createShopifyDiscountCode(amountOff, pointsToRedeem, options = {}
           value: {
             percentage: 1.0
           },
-          items
+          items: {
+            products: productInput
+          }
         },
         combinesWith: {
           orderDiscounts: false,
@@ -301,8 +297,9 @@ async function createShopifyDiscountCode(amountOff, pointsToRedeem, options = {}
         appliesOncePerCustomer: true
       }
     };
+
   } else {
-    // Default: fixed amount discount (e.g., 10 CAD)
+    // Fixed amount discount
     const numericValue = amountOff === 'dynamic'
       ? (pointsToRedeem / 100).toFixed(2)
       : parseFloat(amountOff.replace(/\D/g, '')) || 5;
@@ -336,6 +333,7 @@ async function createShopifyDiscountCode(amountOff, pointsToRedeem, options = {}
     };
   }
 
+  // GraphQL mutation to create the discount
   const mutation = `
     mutation discountCodeBasicCreate($basicCodeDiscount: DiscountCodeBasicInput!) {
       discountCodeBasicCreate(basicCodeDiscount: $basicCodeDiscount) {
@@ -383,6 +381,7 @@ async function createShopifyDiscountCode(amountOff, pointsToRedeem, options = {}
     discountId: discountBasicId.replace('DiscountCodeNode', 'DiscountCodeBasic')
   };
 }
+
 
 
 
