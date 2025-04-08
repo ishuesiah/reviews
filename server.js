@@ -273,7 +273,7 @@ async function createShopifyDiscountCode(amountOff, pointsToRedeem, options = {}
         customerSelection: { all: true },
         customerGets: {
           value: {
-            percentage: 100.0
+            percentage: 1.0
           },
           items: {
             products: {
