@@ -627,10 +627,12 @@ app.post('/api/referral/redeem-milestone', async (req, res) => {
     // Store redeemed milestone
     redeemedMilestones[milestonePoints] = discountCode;
 
+    // Save single reward code as plain string
     await connection.execute(
-      'UPDATE users SET referal_discount_code = ? WHERE user_id = ?',
-      [JSON.stringify(redeemedMilestones), user.user_id]
+      'UPDATE users SET milestone_rewards_discount = ? WHERE user_id = ?',
+      [discountCode, user.user_id]
     );
+
 
     return res.json({
       message: 'Milestone redeemed!',
