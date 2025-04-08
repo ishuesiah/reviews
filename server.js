@@ -245,25 +245,33 @@ app.post('/api/referral/redeem', async (req, res) => {
 /********************************************************************
  * Helper function to create a discount code via Shopify Admin API
  ********************************************************************/
-async function createShopifyDiscountCode(amountOff, pointsToRedeem, title = '', codeOverride = '', isFree = false) {
+async function createShopifyDiscountCode(amountOff, pointsToRedeem, title = '', codeOverride = '', isFree = false, productGid = null) {
   const adminApiUrl = 'https://hemlock-oak.myshopify.com/admin/api/2025-04/graphql.json';
   const adminApiToken = process.env.SHOPIFY_ADMIN_TOKEN;
 
-  const amount = isFree ? '100.00' : (amountOff === 'dynamic'
-    ? (pointsToRedeem / 100).toFixed(2)
-    : parseFloat(amountOff.replace(/\D/g, '')) || 5);
+  const amount = isFree ? '100.00' : (
+    amountOff === 'dynamic'
+      ? (pointsToRedeem / 100).toFixed(2)
+      : parseFloat(amountOff.replace(/\D/g, '')) || 5
+  );
 
   const generatedCode = codeOverride || `POINTS${amount}CAD_${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
 
-  const mutation = `mutation discountCodeBasicCreate($basicCodeDiscount: DiscountCodeBasicInput!) {
-    discountCodeBasicCreate(basicCodeDiscount: $basicCodeDiscount) {
-      codeDiscountNode {
-        id
-        codeDiscount {
-          ... on DiscountCodeBasic {
-            codes(first: 1) {
-              nodes {
-                code
+  const itemsField = productGid
+    ? { products: [productGid] } // 👈 Limit discount to this product
+    : { all: true };
+
+  const mutation = `
+    mutation discountCodeBasicCreate($basicCodeDiscount: DiscountCodeBasicInput!) {
+      discountCodeBasicCreate(basicCodeDiscount: $basicCodeDiscount) {
+        codeDiscountNode {
+          id
+          codeDiscount {
+            ... on DiscountCodeBasic {
+              codes(first: 1) {
+                nodes {
+                  code
+                }
               }
             }
           }
@@ -274,7 +282,7 @@ async function createShopifyDiscountCode(amountOff, pointsToRedeem, title = '', 
         }
       }
     }
-  }`;
+  `;
 
   const variables = {
     basicCodeDiscount: {
@@ -289,7 +297,7 @@ async function createShopifyDiscountCode(amountOff, pointsToRedeem, title = '', 
             appliesOnEachItem: false
           }
         },
-        items: { all: true }
+        items: itemsField
       },
       combinesWith: {
         orderDiscounts: true,
@@ -313,6 +321,7 @@ async function createShopifyDiscountCode(amountOff, pointsToRedeem, title = '', 
   const result = await response.json();
 
   if (result.errors || result.data?.discountCodeBasicCreate?.userErrors?.length > 0) {
+    console.error('🔴 Discount creation error:', JSON.stringify(result, null, 2));
     throw new Error('Failed to create discount code');
   }
 
@@ -519,45 +528,56 @@ app.post('/api/referral/cancel-redeem', async (req, res) => {
 //MILESTONE REWARDS FOR REFERRAL PROGRESS
 app.post('/api/referral/redeem-milestone', async (req, res) => {
   const { email, milestone } = req.body;
-  const milestoneValues = {
-    10: 'Free Stickies',
-    20: 'Free Sticker Pack',
-    30: 'Free Root Beer',
-    40: 'Free Cookies',
-    50: 'Free Book'
+
+  const milestoneRewards = {
+    10: { product: 'Free Stickies', productGid: 'gid://shopify/Product/7563554193652' },
+    20: { product: 'Free Sticker Pack', productGid: 'gid://shopify/Product/2345678901' },
+    30: { product: 'Free Root Beer', productGid: 'gid://shopify/Product/3456789012' },
+    40: { product: 'Free Cookies', productGid: 'gid://shopify/Product/4567890123' },
+    50: { product: 'Free Book', productGid: 'gid://shopify/Product/5678901234' }
   };
 
-  if (!email || !milestone || !milestoneValues[milestone]) {
-    return res.status(400).json({ error: 'Invalid request' });
+  if (!email || !milestoneRewards[milestone]) {
+    return res.status(400).json({ error: 'Invalid email or milestone' });
   }
 
   let connection;
   try {
     connection = await pool.getConnection();
+
     const [users] = await connection.execute('SELECT * FROM users WHERE email = ?', [email]);
-    if (users.length === 0) return res.status(404).json({ error: 'User not found' });
+    if (!users || users.length === 0) {
+      return res.status(404).json({ error: 'User not found.' });
+    }
 
-    const rewardTitle = milestoneValues[milestone];
-    const generatedCode = `MILESTONE${milestone}_${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
+    const user = users[0];
+    const reward = milestoneRewards[milestone];
+    const code = `MILESTONE${milestone}_${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
 
-    // Create a Shopify discount code with 100% off
-    const result = await createShopifyDiscountCode('100', 0, rewardTitle, generatedCode, true);
-    const { code, discountId } = result;
+    const result = await createShopifyDiscountCode('100', 0, reward.product, code, true, reward.productGid);
+    const { code: generatedCode, discountId } = result;
 
-    // Save last milestone code
+    // Save reward info
     await connection.execute(
-      'UPDATE users SET last_discount_code = ?, discount_code_id = ? WHERE email = ?',
-      [code, discountId, email]
+      'UPDATE users SET last_discount_code = ?, discount_code_id = ? WHERE user_id = ?',
+      [generatedCode, discountId, user.user_id]
     );
 
-    return res.json({ success: true, code, product: rewardTitle });
+    return res.json({
+      success: true,
+      code: generatedCode,
+      product: reward.product,
+      newPoints: user.points // optional: add a milestone point cost if needed
+    });
+
   } catch (err) {
-    console.error('Milestone redeem error:', err);
+    console.error('🚨 Milestone redeem error:', err);
     return res.status(500).json({ error: 'Failed to redeem milestone reward.' });
   } finally {
     if (connection) connection.release();
   }
 });
+
 
 
 
