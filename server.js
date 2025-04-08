@@ -421,7 +421,6 @@ const query = `
   const endsAt = new Date(new Date(startsAt).getTime() + 60 * 1000).toISOString();
 
   // Step 3: Run update mutation to set endsAt
-  const mutation = 
     const mutation = `
   mutation discountCodeBasicUpdate($id: ID!, $basicCodeDiscount: DiscountCodeBasicInput!) {
     discountCodeBasicUpdate(id: $id, basicCodeDiscount: $basicCodeDiscount) {
