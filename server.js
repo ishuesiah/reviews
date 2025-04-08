@@ -188,10 +188,11 @@ app.post('/api/referral/redeem', async (req, res) => {
     await connection.execute('UPDATE users SET points = ? WHERE user_id = ?', [newPoints, user.user_id]);
 
     // 4) Log the redemption
-    const insertActionSql = 
+    const insertActionSql = `
       INSERT INTO user_actions (user_id, action_type, points_awarded)
       VALUES (?, ?, ?)
-    ;
+    `;
+
     console.log(`DEBUG: Inserting user action: redeem-${redeemType} for user_id=${user.user_id}, points=-${pointsToRedeem}`);
     await connection.execute(insertActionSql, [user.user_id, redeem-${redeemType}, -pointsToRedeem]);
 
