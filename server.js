@@ -286,40 +286,44 @@ async function createShopifyDiscountCode(amountOff, pointsToRedeem, options = {}
         appliesOncePerCustomer: true
       }
     };
+} else if (rewardType === 'free_product_collection') {
+  if (!options.collectionId) {
+    throw new Error('Missing collectionId for collection reward');
   }
 
-  else if (rewardType === 'free_product_collection') {
-    if (!options.collectionId) {
-      throw new Error('Missing collectionId for free product collection reward');
-    }
+  const variantIds = await getVariantIdsFromCollection(options.collectionId);
+  if (variantIds.length === 0) {
+    throw new Error('No product variants found in this collection');
+  }
 
-    generatedCode = `MILESTONEFREE_${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
-    title = `Free Collection (${generatedCode})`;
+  generatedCode = `MILESTONEFREE_${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
+  title = `Free Collection (${generatedCode})`;
 
-    variables = {
-      basicCodeDiscount: {
-        title,
-        code: generatedCode,
-        startsAt: new Date().toISOString(),
-        customerSelection: { all: true },
-        customerGets: {
-          value: { percentage: 1.0 },
-          items: {
-            collections: {
-              collectionsToAdd: [options.collectionId]
-            }
+  variables = {
+    basicCodeDiscount: {
+      title,
+      code: generatedCode,
+      startsAt: new Date().toISOString(),
+      customerSelection: { all: true },
+      customerGets: {
+        value: { percentage: 1.0 },
+        items: {
+          products: {
+            productVariantsToAdd: variantIds
           }
-        },
-        combinesWith: {
-          orderDiscounts: false,
-          productDiscounts: false,
-          shippingDiscounts: true
-        },
-        usageLimit: 1,
-        appliesOncePerCustomer: true
-      }
-    };
-  }
+        }
+      },
+      combinesWith: {
+        orderDiscounts: false,
+        productDiscounts: false,
+        shippingDiscounts: true
+      },
+      usageLimit: 1,
+      appliesOncePerCustomer: true
+    }
+  };
+}
+
 
   else {
     const numericValue = amountOff === 'dynamic'
@@ -672,6 +676,49 @@ app.post('/api/referral/redeem-milestone', async (req, res) => {
   }
 });
 
+
+//HELPER VARIANTS FUNCTION
+async function getVariantIdsFromCollection(collectionId) {
+  const query = `
+    query($id: ID!) {
+      collection(id: $id) {
+        products(first: 50) {
+          edges {
+            node {
+              variants(first: 10) {
+                edges {
+                  node {
+                    id
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  `;
+
+  const response = await fetch('https://hemlock-oak.myshopify.com/admin/api/2025-04/graphql.json', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Shopify-Access-Token': process.env.SHOPIFY_ADMIN_TOKEN
+    },
+    body: JSON.stringify({ query, variables: { id: collectionId } })
+  });
+
+  const result = await response.json();
+
+  const variantIds = [];
+  result.data.collection.products.edges.forEach(product => {
+    product.node.variants.edges.forEach(variant => {
+      variantIds.push(variant.node.id);
+    });
+  });
+
+  return variantIds;
+}
 
 
 
