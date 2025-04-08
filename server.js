@@ -574,7 +574,7 @@ app.post('/api/referral/redeem-milestone', async (req, res) => {
 
   // Define rewards and their corresponding product variant IDs
   const milestoneRewards = {
-    10: { name: 'Free Stickies', productVariantId: 'gid://shopify/ProductVariant/7563554193652' },
+    10: { name: 'Free Stickies', productVariantId: 'gid://shopify/ProductVariant/46363036713204' },
     20: { name: 'Free Sticker Pack', productVariantId: 'gid://shopify/ProductVariant/2345678901' },
     30: { name: 'Free Root Beer', productVariantId: 'gid://shopify/ProductVariant/3456789012' },
     40: { name: 'Free Cookies', productVariantId: 'gid://shopify/ProductVariant/4567890123' },
@@ -621,7 +621,7 @@ app.post('/api/referral/redeem-milestone', async (req, res) => {
     // Create Shopify discount code for free product
     const { code: discountCode, discountId } = await createShopifyDiscountCode('100', 0, {
       rewardType: 'free_product',
-      productVariantId: 'gid://shopify/ProductVariant/7563554193652'
+      productVariantId: reward.productVariantId
     });
 
     // Store redeemed milestone
