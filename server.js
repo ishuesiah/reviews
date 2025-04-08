@@ -108,7 +108,7 @@ app.get('/api/customer-reviews', async (req, res) => {
       return res.status(400).json({ error: 'Customer email is required' });
     }
     
-    console.log(`Fetching reviews for customer: ${email}`);
+    console.log(Fetching reviews for customer: ${email});
     
     const reviewsResponse = await axios.get('https://judge.me/api/v1/reviews', {
       params: {
@@ -161,7 +161,7 @@ app.post('/api/referral/redeem', async (req, res) => {
       console.log("DEBUG: Missing email or pointsToRedeem");
       return res.status(400).json({ error: 'Missing email or pointsToRedeem.' });
     }
-    console.log(`DEBUG: Attempting to redeem ${pointsToRedeem} points for email=${email}`);
+    console.log(DEBUG: Attempting to redeem ${pointsToRedeem} points for email=${email});
 
     // 1) Find user in MySQL using the pool
     console.log("DEBUG: Running query: SELECT * FROM users WHERE email = ?", email);
@@ -169,14 +169,14 @@ app.post('/api/referral/redeem', async (req, res) => {
     console.log("DEBUG: Query result rows:", rows);
 
     if (rows.length === 0) {
-      console.log(`DEBUG: No user found for email=${email}`);
+      console.log(DEBUG: No user found for email=${email});
       return res.status(404).json({ error: 'User not found.' });
     }
     const user = rows[0];
     console.log("DEBUG: Found user:", user);
 
     // 2) Check if the user has enough points
-    console.log(`DEBUG: User has ${user.points} points. Need ${pointsToRedeem}.`);
+    console.log(DEBUG: User has ${user.points} points. Need ${pointsToRedeem}.);
     if (user.points < pointsToRedeem) {
       console.log("DEBUG: Not enough points to redeem.");
       return res.status(400).json({ error: 'Not enough points to redeem.' });
@@ -184,23 +184,23 @@ app.post('/api/referral/redeem', async (req, res) => {
 
     // 3) Subtract redeemed points from the user's balance
     const newPoints = user.points - pointsToRedeem;
-    console.log(`DEBUG: Subtracting points. New points balance will be ${newPoints}`);
+    console.log(DEBUG: Subtracting points. New points balance will be ${newPoints});
     await connection.execute('UPDATE users SET points = ? WHERE user_id = ?', [newPoints, user.user_id]);
 
     // 4) Log the redemption
-    const insertActionSql = `
+    const insertActionSql = 
       INSERT INTO user_actions (user_id, action_type, points_awarded)
       VALUES (?, ?, ?)
-    `;
-    console.log(`DEBUG: Inserting user action: redeem-${redeemType} for user_id=${user.user_id}, points=-${pointsToRedeem}`);
-    await connection.execute(insertActionSql, [user.user_id, `redeem-${redeemType}`, -pointsToRedeem]);
+    ;
+    console.log(DEBUG: Inserting user action: redeem-${redeemType} for user_id=${user.user_id}, points=-${pointsToRedeem});
+    await connection.execute(insertActionSql, [user.user_id, redeem-${redeemType}, -pointsToRedeem]);
 
     // 5) Create a discount code (or gift card) via Shopify Admin API
     let generatedCode = '';
     let discountId = '';
     
     if (redeemType === 'discount') {
-      console.log(`DEBUG: Creating discount code for redeemValue=${redeemValue}`);
+      console.log(DEBUG: Creating discount code for redeemValue=${redeemValue});
       const result = await createShopifyDiscountCode(redeemValue, pointsToRedeem);
       generatedCode = result.code;
       discountId = result.discountId;
@@ -221,7 +221,7 @@ app.post('/api/referral/redeem', async (req, res) => {
 
 
     // 7) Return the new code and updated points balance
-    console.log(`DEBUG: Successfully redeemed. Returning code=${generatedCode}, newPoints=${newPoints}`);
+    console.log(DEBUG: Successfully redeemed. Returning code=${generatedCode}, newPoints=${newPoints});
     return res.json({
       message: 'Redeemed points successfully.',
       discountCode: generatedCode,
@@ -253,9 +253,9 @@ async function createShopifyDiscountCode(amountOff, pointsToRedeem) {
     ? (pointsToRedeem / 100).toFixed(2)
     : parseFloat(amountOff.replace(/\D/g, '')) || 5;
 
-  const generatedCode = `POINTS${numericValue}CAD_${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
+  const generatedCode = POINTS${numericValue}CAD_${Math.random().toString(36).substr(2, 5).toUpperCase()};
 
-  const mutation = `
+  const mutation = 
     mutation discountCodeBasicCreate($basicCodeDiscount: DiscountCodeBasicInput!) {
       discountCodeBasicCreate(basicCodeDiscount: $basicCodeDiscount) {
         codeDiscountNode {
@@ -276,11 +276,11 @@ async function createShopifyDiscountCode(amountOff, pointsToRedeem) {
         }
       }
     }
-  `;
+  ;
 
   const variables = {
     basicCodeDiscount: {
-      title: `$${numericValue} Off Points Reward`,
+      title: $${numericValue} Off Points Reward,
       code: generatedCode,
       startsAt: new Date().toISOString(),
       customerSelection: { all: true },
@@ -339,7 +339,7 @@ async function deactivateShopifyDiscount(discountId) {
   const adminApiToken = process.env.SHOPIFY_ADMIN_TOKEN;
 
   // Step 1: Query existing discount to get startsAt
-  const query = `
+  const query = 
     query getDiscount($id: ID!) {
       codeDiscountNode(id: $id) {
         codeDiscount {
@@ -349,7 +349,7 @@ async function deactivateShopifyDiscount(discountId) {
         }
       }
     }
-  `;
+  ;
 
   const queryResponse = await fetch(adminApiUrl, {
     method: 'POST',
@@ -374,7 +374,7 @@ async function deactivateShopifyDiscount(discountId) {
   const endsAt = new Date(new Date(startsAt).getTime() + 60 * 1000).toISOString();
 
   // Step 3: Run update mutation to set endsAt
-  const mutation = `
+  const mutation = 
     mutation discountCodeBasicUpdate($id: ID!, $basicCodeDiscount: DiscountCodeBasicInput!) {
       discountCodeBasicUpdate(id: $id, basicCodeDiscount: $basicCodeDiscount) {
         codeDiscountNode {
@@ -386,7 +386,7 @@ async function deactivateShopifyDiscount(discountId) {
         }
       }
     }
-  `;
+  ;
 
   const variables = {
     id: discountId,
@@ -440,7 +440,7 @@ app.post('/api/referral/mark-discount-used', async (req, res) => {
     }
 
     connection = await pool.getConnection();
-    console.log(`DEBUG: Checking user ${email} for code ${usedCode}`);
+    console.log(DEBUG: Checking user ${email} for code ${usedCode});
 
     // Ensure the code matches the current discount code
     const [rows] = await connection.execute(
@@ -459,7 +459,7 @@ app.post('/api/referral/mark-discount-used', async (req, res) => {
       [email]
     );
 
-    console.log(`DEBUG: Cleared last_discount_code for user ${email}`);
+    console.log(DEBUG: Cleared last_discount_code for user ${email});
     res.json({ message: 'Discount code marked as used and removed from user.' });
 
   } catch (err) {
@@ -497,7 +497,7 @@ app.post('/api/referral/cancel-redeem', async (req, res) => {
       try {
         await deactivateShopifyDiscount(user.discount_code_id);
 
-        console.log(`Deleted discount from Shopify: ${user.discount_code_id}`);
+        console.log(Deleted discount from Shopify: ${user.discount_code_id});
       } catch (err) {
         console.error('Failed to delete discount from Shopify:', err.message);
       }
@@ -521,11 +521,8 @@ app.post('/api/referral/cancel-redeem', async (req, res) => {
 
 
 
-
-
-
 // Start the server
 app.listen(port, () => {
-  console.log(`Server running on port ${port}`);
-  console.log(`Configured for shop: ${SHOP_DOMAIN}`);
+  console.log(Server running on port ${port});
+  console.log(Configured for shop: ${SHOP_DOMAIN});
 });
