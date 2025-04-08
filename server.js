@@ -194,7 +194,7 @@ app.post('/api/referral/redeem', async (req, res) => {
     `;
 
     console.log(`DEBUG: Inserting user action: redeem-${redeemType} for user_id=${user.user_id}, points=-${pointsToRedeem}`);
-    await connection.execute(insertActionSql, [user.user_id, redeem-${redeemType}, -pointsToRedeem]);
+    await connection.execute(insertActionSql, [user.user_id, `redeem-${redeemType}`, -pointsToRedeem]);
 
     // 5) Create a discount code (or gift card) via Shopify Admin API
     let generatedCode = '';
