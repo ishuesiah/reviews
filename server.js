@@ -280,8 +280,9 @@ async function createShopifyDiscountCode(amountOff, pointsToRedeem, title = '', 
     }
   `;
 
+  // ✅ Proper item field formatting
   const itemsField = productGid
-    ? { productIds: [productGid] } // ✅ Correct shape for product-specific discount
+    ? { products: { productIds: [productGid] } }
     : { all: true };
 
   const variables = {
@@ -320,7 +321,6 @@ async function createShopifyDiscountCode(amountOff, pointsToRedeem, title = '', 
 
   const result = await response.json();
 
-  // 🛑 Log GraphQL userErrors or errors
   if (result.errors || result.data?.discountCodeBasicCreate?.userErrors?.length > 0) {
     console.error('🔴 Discount creation error:', JSON.stringify(result, null, 2));
     throw new Error('Failed to create discount code');
