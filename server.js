@@ -108,7 +108,7 @@ app.get('/api/customer-reviews', async (req, res) => {
       return res.status(400).json({ error: 'Customer email is required' });
     }
     
-    console.log(Fetching reviews for customer: ${email});
+    console.log(`Fetching reviews for customer: ${email}`);
     
     const reviewsResponse = await axios.get('https://judge.me/api/v1/reviews', {
       params: {
