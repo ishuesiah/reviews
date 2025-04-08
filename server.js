@@ -621,7 +621,7 @@ app.post('/api/referral/redeem-milestone', async (req, res) => {
     // Create Shopify discount code for free product
     const { code: discountCode, discountId } = await createShopifyDiscountCode('100', 0, {
       rewardType: 'free_product',
-      productVariantId: reward.productVariantId
+      productVariantId: 'gid://shopify/ProductVariant/7563554193652'
     });
 
     // Store redeemed milestone
