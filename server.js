@@ -385,17 +385,18 @@ async function deactivateShopifyDiscount(discountId) {
   const adminApiToken = process.env.SHOPIFY_ADMIN_TOKEN;
 
   // Step 1: Query existing discount to get startsAt
-  const query = 
-    query getDiscount($id: ID!) {
-      codeDiscountNode(id: $id) {
-        codeDiscount {
-          ... on DiscountCodeBasic {
-            startsAt
-          }
+const query = `
+  query getDiscount($id: ID!) {
+    codeDiscountNode(id: $id) {
+      codeDiscount {
+        ... on DiscountCodeBasic {
+          startsAt
         }
       }
     }
-  ;
+  }
+`;
+
 
   const queryResponse = await fetch(adminApiUrl, {
     method: 'POST',
