@@ -604,9 +604,9 @@ app.post('/api/referral/redeem-milestone', async (req, res) => {
       return res.status(400).json({ error: `You need ${milestonePoints} referrals to unlock this reward.` });
     }
 
-    // Parse milestone_rewards_discount field
+    // Parse referal_discount_code field
     let redeemedMilestones = {};
-    if (user.milestone_rewards_discount) {
+    if (user.referal_discount_code) {
       try {
         redeemedMilestones = JSON.parse(user.referal_discount_code);
       } catch (err) {
@@ -629,7 +629,7 @@ app.post('/api/referral/redeem-milestone', async (req, res) => {
 
     // Save single reward code as plain string
     await connection.execute(
-      'UPDATE users SET milestone_rewards_discount = ? WHERE user_id = ?',
+      'UPDATE users SET referal_discount_code = ? WHERE user_id = ?',
       [discountCode, user.user_id]
     );
 
