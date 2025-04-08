@@ -256,12 +256,12 @@ async function createShopifyDiscountCode(amountOff, pointsToRedeem, options = {}
   let title = '';
 
   if (rewardType === 'free_product') {
-    if (!options.productVariantId) {
-      throw new Error('Missing productVariantId for free product reward');
-    }
-
     generatedCode = `MILESTONEFREE_${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
-    title = `Free Product (${generatedCode})`;
+    title = `Free Collection Reward (${generatedCode})`;
+
+    if (!options.collectionId) {
+      throw new Error('Missing collectionId for free collection reward');
+    }
 
     variables = {
       basicCodeDiscount: {
@@ -272,8 +272,8 @@ async function createShopifyDiscountCode(amountOff, pointsToRedeem, options = {}
         customerGets: {
           value: { percentage: 1.0 },
           items: {
-            products: {
-              productVariantsToAdd: [options.productVariantId]
+            collections: {
+              products: [options.collectionId]
             }
           }
         },
@@ -286,52 +286,14 @@ async function createShopifyDiscountCode(amountOff, pointsToRedeem, options = {}
         appliesOncePerCustomer: true
       }
     };
-} else if (rewardType === 'free_product_collection') {
-  if (!options.collectionId) {
-    throw new Error('Missing collectionId for collection reward');
-  }
 
-  const variantIds = await getVariantIdsFromCollection(options.collectionId);
-  if (variantIds.length === 0) {
-    throw new Error('No product variants found in this collection');
-  }
-
-  generatedCode = `MILESTONEFREE_${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
-  title = `Free Collection (${generatedCode})`;
-
-  variables = {
-    basicCodeDiscount: {
-      title,
-      code: generatedCode,
-      startsAt: new Date().toISOString(),
-      customerSelection: { all: true },
-      customerGets: {
-        value: { percentage: 1.0 },
-        items: {
-          products: {
-            productVariantsToAdd: variantIds
-          }
-        }
-      },
-      combinesWith: {
-        orderDiscounts: false,
-        productDiscounts: false,
-        shippingDiscounts: true
-      },
-      usageLimit: 1,
-      appliesOncePerCustomer: true
-    }
-  };
-}
-
-
-  else {
+  } else {
     const numericValue = amountOff === 'dynamic'
       ? (pointsToRedeem / 100).toFixed(2)
       : parseFloat(amountOff.replace(/\D/g, '')) || 5;
 
     generatedCode = `POINTS${numericValue}CAD_${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
-    title = `$${numericValue} Off`;
+    title = `$${numericValue} Off Points Reward`;
 
     variables = {
       basicCodeDiscount: {
@@ -406,8 +368,6 @@ async function createShopifyDiscountCode(amountOff, pointsToRedeem, options = {}
     discountId: discountBasicId.replace('DiscountCodeNode', 'DiscountCodeBasic')
   };
 }
-
-
 
 
 
@@ -609,7 +569,7 @@ app.post('/api/referral/cancel-redeem', async (req, res) => {
 app.post('/api/referral/redeem-milestone', async (req, res) => {
   const { email, milestonePoints } = req.body;
 
-  // Define rewards and their corresponding collection IDs
+  // ✅ Collection-based milestone rewards
   const milestoneRewards = {
     5: { name: 'Free Notebook', collectionId: 'gid://shopify/Collection/410265616628' },
     10: { name: 'Free Planner', collectionId: 'gid://shopify/Collection/423756136692' },
@@ -632,10 +592,12 @@ app.post('/api/referral/redeem-milestone', async (req, res) => {
     const user = rows[0];
     const reward = milestoneRewards[milestonePoints];
 
+    // Ensure user has enough referrals
     if ((user.referral_count || 0) < milestonePoints) {
       return res.status(400).json({ error: `You need ${milestonePoints} referrals to unlock this reward.` });
     }
 
+    // Parse previously redeemed milestones
     let redeemedMilestones = {};
     if (user.referal_discount_code) {
       try {
@@ -649,9 +611,9 @@ app.post('/api/referral/redeem-milestone', async (req, res) => {
       return res.status(400).json({ error: 'Milestone already redeemed.' });
     }
 
-    // ✅ Create a discount code that applies to the entire collection
+    // ✅ Create a 100% off discount for collection
     const { code: discountCode, discountId } = await createShopifyDiscountCode('100', 0, {
-      rewardType: 'free_product_collection',
+      rewardType: 'free_product',
       collectionId: reward.collectionId
     });
 
@@ -675,50 +637,6 @@ app.post('/api/referral/redeem-milestone', async (req, res) => {
     if (connection) connection.release();
   }
 });
-
-
-//HELPER VARIANTS FUNCTION
-async function getVariantIdsFromCollection(collectionId) {
-  const query = `
-    query($id: ID!) {
-      collection(id: $id) {
-        products(first: 50) {
-          edges {
-            node {
-              variants(first: 10) {
-                edges {
-                  node {
-                    id
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  `;
-
-  const response = await fetch('https://hemlock-oak.myshopify.com/admin/api/2025-04/graphql.json', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Shopify-Access-Token': process.env.SHOPIFY_ADMIN_TOKEN
-    },
-    body: JSON.stringify({ query, variables: { id: collectionId } })
-  });
-
-  const result = await response.json();
-
-  const variantIds = [];
-  result.data.collection.products.edges.forEach(product => {
-    product.node.variants.edges.forEach(variant => {
-      variantIds.push(variant.node.id);
-    });
-  });
-
-  return variantIds;
-}
 
 
 
