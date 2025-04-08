@@ -249,17 +249,13 @@ async function createShopifyDiscountCode(amountOff, pointsToRedeem, title = '', 
   const adminApiUrl = 'https://hemlock-oak.myshopify.com/admin/api/2025-04/graphql.json';
   const adminApiToken = process.env.SHOPIFY_ADMIN_TOKEN;
 
-  const amount = isFree ? '100.00' : (
-    amountOff === 'dynamic'
+  const amount = isFree
+    ? '100.00'
+    : amountOff === 'dynamic'
       ? (pointsToRedeem / 100).toFixed(2)
-      : parseFloat(amountOff.replace(/\D/g, '')) || 5
-  );
+      : parseFloat(amountOff.replace(/\D/g, '')) || 5;
 
   const generatedCode = codeOverride || `POINTS${amount}CAD_${Math.random().toString(36).substr(2, 5).toUpperCase()}`;
-
-  const itemsField = productGid
-    ? { products: [productGid] } // 👈 Limit discount to this product
-    : { all: true };
 
   const mutation = `
     mutation discountCodeBasicCreate($basicCodeDiscount: DiscountCodeBasicInput!) {
@@ -283,6 +279,10 @@ async function createShopifyDiscountCode(amountOff, pointsToRedeem, title = '', 
       }
     }
   `;
+
+  const itemsField = productGid
+    ? { productIds: [productGid] } // ✅ Correct shape for product-specific discount
+    : { all: true };
 
   const variables = {
     basicCodeDiscount: {
@@ -320,6 +320,7 @@ async function createShopifyDiscountCode(amountOff, pointsToRedeem, title = '', 
 
   const result = await response.json();
 
+  // 🛑 Log GraphQL userErrors or errors
   if (result.errors || result.data?.discountCodeBasicCreate?.userErrors?.length > 0) {
     console.error('🔴 Discount creation error:', JSON.stringify(result, null, 2));
     throw new Error('Failed to create discount code');
@@ -333,6 +334,7 @@ async function createShopifyDiscountCode(amountOff, pointsToRedeem, title = '', 
     discountId: discountBasicId.replace('DiscountCodeNode', 'DiscountCodeBasic')
   };
 }
+
 
 
 /********************************************************************
