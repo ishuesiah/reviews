@@ -161,7 +161,7 @@ app.post('/api/referral/redeem', async (req, res) => {
       console.log("DEBUG: Missing email or pointsToRedeem");
       return res.status(400).json({ error: 'Missing email or pointsToRedeem.' });
     }
-    console.log(DEBUG: Attempting to redeem ${pointsToRedeem} points for email=${email});
+    console.log(`DEBUG: Attempting to redeem ${pointsToRedeem} points for email=${email}`);
 
     // 1) Find user in MySQL using the pool
     console.log("DEBUG: Running query: SELECT * FROM users WHERE email = ?", email);
@@ -169,14 +169,14 @@ app.post('/api/referral/redeem', async (req, res) => {
     console.log("DEBUG: Query result rows:", rows);
 
     if (rows.length === 0) {
-      console.log(DEBUG: No user found for email=${email});
+      console.log(`DEBUG: No user found for email=${email}`);
       return res.status(404).json({ error: 'User not found.' });
     }
     const user = rows[0];
     console.log("DEBUG: Found user:", user);
 
     // 2) Check if the user has enough points
-    console.log(DEBUG: User has ${user.points} points. Need ${pointsToRedeem}.);
+    console.log(`DEBUG: User has ${user.points} points. Need ${pointsToRedeem}.`);
     if (user.points < pointsToRedeem) {
       console.log("DEBUG: Not enough points to redeem.");
       return res.status(400).json({ error: 'Not enough points to redeem.' });
@@ -184,7 +184,7 @@ app.post('/api/referral/redeem', async (req, res) => {
 
     // 3) Subtract redeemed points from the user's balance
     const newPoints = user.points - pointsToRedeem;
-    console.log(DEBUG: Subtracting points. New points balance will be ${newPoints});
+    console.log(`DEBUG: Subtracting points. New points balance will be ${newPoints}`);
     await connection.execute('UPDATE users SET points = ? WHERE user_id = ?', [newPoints, user.user_id]);
 
     // 4) Log the redemption
@@ -192,7 +192,7 @@ app.post('/api/referral/redeem', async (req, res) => {
       INSERT INTO user_actions (user_id, action_type, points_awarded)
       VALUES (?, ?, ?)
     ;
-    console.log(DEBUG: Inserting user action: redeem-${redeemType} for user_id=${user.user_id}, points=-${pointsToRedeem});
+    console.log(`DEBUG: Inserting user action: redeem-${redeemType} for user_id=${user.user_id}, points=-${pointsToRedeem}`);
     await connection.execute(insertActionSql, [user.user_id, redeem-${redeemType}, -pointsToRedeem]);
 
     // 5) Create a discount code (or gift card) via Shopify Admin API
@@ -221,7 +221,7 @@ app.post('/api/referral/redeem', async (req, res) => {
 
 
     // 7) Return the new code and updated points balance
-    console.log(DEBUG: Successfully redeemed. Returning code=${generatedCode}, newPoints=${newPoints});
+    console.log(`DEBUG: Successfully redeemed. Returning code=${generatedCode}, newPoints=${newPoints}`);
     return res.json({
       message: 'Redeemed points successfully.',
       discountCode: generatedCode,
@@ -648,6 +648,6 @@ app.post('/api/referral/redeem-milestone', async (req, res) => {
 
 // Start the server
 app.listen(port, () => {
-  console.log(Server running on port ${port});
-  console.log(Configured for shop: ${SHOP_DOMAIN});
+  console.log(`Server running on port ${port}`);
+  console.log(`Configured for shop: ${SHOP_DOMAIN}`);
 });
