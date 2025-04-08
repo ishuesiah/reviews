@@ -201,7 +201,7 @@ app.post('/api/referral/redeem', async (req, res) => {
     let discountId = '';
     
     if (redeemType === 'discount') {
-      console.log(DEBUG: Creating discount code for redeemValue=${redeemValue});
+      console.log(`DEBUG: Creating discount code for redeemValue=${redeemValue}`);
       const result = await createShopifyDiscountCode(redeemValue, pointsToRedeem);
       generatedCode = result.code;
       discountId = result.discountId;
@@ -486,7 +486,7 @@ app.post('/api/referral/mark-discount-used', async (req, res) => {
     }
 
     connection = await pool.getConnection();
-    console.log(DEBUG: Checking user ${email} for code ${usedCode});
+    console.log(`DEBUG: Checking user ${email} for code ${usedCode}`);
 
     // Ensure the code matches the current discount code
     const [rows] = await connection.execute(
@@ -505,7 +505,7 @@ app.post('/api/referral/mark-discount-used', async (req, res) => {
       [email]
     );
 
-    console.log(DEBUG: Cleared last_discount_code for user ${email});
+    console.log(`DEBUG: Cleared last_discount_code for user ${email}`);
     res.json({ message: 'Discount code marked as used and removed from user.' });
 
   } catch (err) {
