@@ -500,7 +500,14 @@ app.post('/api/referral/mark-discount-used', async (req, res) => {
 
     const user = rows[0];
 
-    // Deactivate the discount in Shopify (if ID exists)
+    // ✅ Step 1: Clear both discount fields from DB first
+    await connection.execute(
+      'UPDATE users SET last_discount_code = NULL, discount_code_id = NULL WHERE email = ?',
+      [email]
+    );
+    console.log(`✅ Cleared last_discount_code and discount_code_id for ${email}`);
+
+    // ✅ Step 2: Then deactivate the discount in Shopify (if ID existed)
     if (user.discount_code_id) {
       try {
         await deactivateShopifyDiscount(user.discount_code_id);
@@ -510,14 +517,7 @@ app.post('/api/referral/mark-discount-used', async (req, res) => {
       }
     }
 
-    // Clear both discount code fields
-    await connection.execute(
-      'UPDATE users SET last_discount_code = NULL, discount_code_id = NULL WHERE email = ?',
-      [email]
-    );
-
-    console.log(`✅ Discount code ${usedCode} cleared from DB for user ${email}`);
-    res.json({ message: 'Discount marked as used, deactivated in Shopify, and removed from DB.' });
+    res.json({ message: 'Discount removed from DB and deactivated in Shopify (if needed).' });
 
   } catch (err) {
     console.error('❌ Error in mark-discount-used:', err.message);
@@ -526,6 +526,7 @@ app.post('/api/referral/mark-discount-used', async (req, res) => {
     if (connection) connection.release();
   }
 });
+
 
 
 app.post('/api/referral/cancel-redeem', async (req, res) => {
