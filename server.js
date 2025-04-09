@@ -473,7 +473,7 @@ const query = `
  * POST /api/referral/mark-discount-used
  * Body: {
  *   "email": "user@example.com",
- *   "usedCode": "POINTS10PCT_XYZ12"
+ *   "usedCode": "POINTS10CAD_ABC12"
  * }
  ********************************************************************/
 app.post('/api/referral/mark-discount-used', async (req, res) => {
@@ -486,9 +486,8 @@ app.post('/api/referral/mark-discount-used', async (req, res) => {
     }
 
     connection = await pool.getConnection();
-    console.log(`DEBUG: Checking user ${email} for code ${usedCode}`);
+    console.log(`DEBUG: Looking up user ${email} for code ${usedCode}`);
 
-    // Ensure the code matches the current discount code
     const [rows] = await connection.execute(
       'SELECT * FROM users WHERE email = ? AND last_discount_code = ?',
       [email, usedCode]
@@ -499,22 +498,35 @@ app.post('/api/referral/mark-discount-used', async (req, res) => {
       return res.status(404).json({ error: 'User with that code not found or code does not match.' });
     }
 
-    // Clear the last_discount_code field
+    const user = rows[0];
+
+    // Deactivate the discount in Shopify (if ID exists)
+    if (user.discount_code_id) {
+      try {
+        await deactivateShopifyDiscount(user.discount_code_id);
+        console.log(`✅ Deactivated discount in Shopify: ${user.discount_code_id}`);
+      } catch (err) {
+        console.error('⚠️ Failed to deactivate Shopify discount:', err.message);
+      }
+    }
+
+    // Clear both discount code fields
     await connection.execute(
-      'UPDATE users SET last_discount_code = NULL WHERE email = ?',
+      'UPDATE users SET last_discount_code = NULL, discount_code_id = NULL WHERE email = ?',
       [email]
     );
 
-    console.log(`DEBUG: Cleared last_discount_code for user ${email}`);
-    res.json({ message: 'Discount code marked as used and removed from user.' });
+    console.log(`✅ Discount code ${usedCode} cleared from DB for user ${email}`);
+    res.json({ message: 'Discount marked as used, deactivated in Shopify, and removed from DB.' });
 
   } catch (err) {
-    console.error('Error marking discount code used:', err.message);
+    console.error('❌ Error in mark-discount-used:', err.message);
     res.status(500).json({ error: 'Internal server error' });
   } finally {
     if (connection) connection.release();
   }
 });
+
 
 app.post('/api/referral/cancel-redeem', async (req, res) => {
   const { email, pointsToRefund } = req.body;
