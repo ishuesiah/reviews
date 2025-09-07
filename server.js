@@ -9,6 +9,22 @@ require('dotenv').config();
 const app = express();
 const port = process.env.PORT || 3306;
 const SHOP_DOMAIN = process.env.SHOP_DOMAIN || 'hemlock-oak.myshopify.com';
+app.use(cors({
+  origin(origin, cb) {
+    const allowed = [
+      'https://www.hemlockandoak.com',
+      'https://hemlock-oak.myshopify.com',
+      'http://127.0.0.1:9292',
+      'http://localhost:9292',
+      'http://localhost:3000'
+    ];
+    if (!origin || allowed.includes(origin)) return cb(null, true);
+    return cb(new Error('Not allowed by CORS'));
+  },
+  methods: ['GET','POST','OPTIONS'],
+  credentials: true,
+  allowedHeaders: ['Content-Type','Authorization']
+}));
 
 
 // Initialize MySQL pool
