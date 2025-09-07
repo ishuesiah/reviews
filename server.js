@@ -9,22 +9,6 @@ require('dotenv').config();
 const app = express();
 const port = process.env.PORT || 3306;
 const SHOP_DOMAIN = process.env.SHOP_DOMAIN || 'hemlock-oak.myshopify.com';
-app.use(cors({
-  origin(origin, cb) {
-    const allowed = [
-      'https://www.hemlockandoak.com',
-      'https://hemlock-oak.myshopify.com',
-      'http://127.0.0.1:9292',
-      'http://localhost:9292',
-      'http://localhost:3000'
-    ];
-    if (!origin || allowed.includes(origin)) return cb(null, true);
-    return cb(new Error('Not allowed by CORS'));
-  },
-  methods: ['GET','POST','OPTIONS'],
-  credentials: true,
-  allowedHeaders: ['Content-Type','Authorization']
-}));
 
 
 // Initialize MySQL pool
@@ -65,20 +49,22 @@ pool.on('error', (err) => {
 
 // Enable CORS for your Shopify store domain
 app.use(cors({
-  origin: function (origin, callback) {
-    const allowedOrigins = [
+  origin(origin, cb) {
+    const allowed = [
+      'https://www.hemlockandoak.com',
       'https://hemlock-oak.myshopify.com',
-      'https://www.hemlockandoak.com'
+      'http://127.0.0.1:9292',
+      'http://localhost:9292',
+      'http://localhost:3000'
     ];
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
+    if (!origin || allowed.includes(origin)) return cb(null, true);
+    return cb(new Error('Not allowed by CORS'));
   },
-  methods: ['GET', 'POST'],
-  credentials: true
+  methods: ['GET','POST','OPTIONS'],
+  credentials: true,
+  allowedHeaders: ['Content-Type','Authorization']
 }));
+
 
 app.use(express.json());
 
